@@ -9,6 +9,7 @@ stack shrank, the top panel being forced on by "docked -> exactly [top]".
 import os
 import sys
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 import displayctl  # noqa: E402
@@ -412,6 +413,75 @@ class BrightnessStep(unittest.TestCase):
 
     def test_rejects_anything_but_up_or_down(self):
         self.assertEqual(displayctl.run(["brightness", "sideways"]), 64)
+
+
+class Recordable(unittest.TestCase):
+    """What gets remembered while docked. Docked and undocked are one monitor
+    set to Mutter, so recording the policy's "bottom panel off" overwrote the
+    stacked layout the user chose undocked (a user's journal, 2026-10-25)."""
+
+    def setUp(self):
+        self.monitors = {
+            TOP: multi_mon(TOP, [(2880, 1800, 120.0)]),
+            BOTTOM: multi_mon(BOTTOM, [(2880, 1800, 120.0)]),
+        }
+        for m in self.monitors.values():
+            m["modes"][0]["preferred_scale"] = 1.6666666269302368
+        # Docked: the policy has turned the bottom panel off.
+        self.monitors[BOTTOM]["modes"][0]["is_current"] = False
+        self.docked_live = [logical(0, 0, 2.0, [TOP], primary=True)]
+        self.stacked = monitors_xml.snapshot(
+            {TOP: multi_mon(TOP, [(2880, 1800, 120.0)]),
+             BOTTOM: multi_mon(BOTTOM, [(2880, 1800, 120.0)])},
+            [logical(0, 0, 2.0, [TOP], primary=True), logical(0, 900, 2.0, [BOTTOM])],
+            "logical")
+
+    def test_docked_keeps_the_remembered_bottom_panel(self):
+        config = displayctl.recordable(self.monitors, self.docked_live, PROPS,
+                                       True, self.stacked)
+        self.assertEqual(config.shape(), self.stacked.shape())
+        self.assertEqual(config.layout_mode, "logical")
+        self.assertEqual(config.disabled, [])
+        bottom = next(lm for lm in config.logicals if lm.connectors == [BOTTOM])
+        self.assertEqual(bottom.scale, 2.0, "its own scale, not the preferred one")
+        self.assertEqual(repr(bottom.monitors[0].mode), "2880x1800@120.000",
+                         "a panel that is off still gets a mode Mutter accepts")
+        store = monitors_xml.Store([self.stacked])
+        self.assertFalse(store.replace(config), "docking changes nothing on disk")
+
+    def test_a_change_made_while_docked_is_still_recorded(self):
+        live = [logical(0, 0, 1.5, [TOP], primary=True)]
+        config = displayctl.recordable(self.monitors, live, PROPS, True, self.stacked)
+        scales = {lm.connectors[0]: lm.scale for lm in config.logicals}
+        self.assertEqual(scales, {TOP: 1.5, BOTTOM: 2.0})
+        self.assertEqual([(lm.x, lm.y) for lm in config.logicals], [(0, 0), (0, 1200)])
+
+    def test_undocked_is_recorded_as_it_is(self):
+        config = displayctl.recordable(self.monitors, self.docked_live, PROPS,
+                                       False, self.stacked)
+        self.assertEqual(config.enabled_connectors(), [TOP])
+
+    def test_nothing_is_added_when_the_bottom_panel_was_off_before_too(self):
+        top_only = monitors_xml.snapshot(self.monitors, self.docked_live, "logical")
+        config = displayctl.recordable(self.monitors, self.docked_live, PROPS,
+                                       True, top_only)
+        self.assertEqual(config.enabled_connectors(), [TOP])
+        config = displayctl.recordable(self.monitors, self.docked_live, PROPS,
+                                       True, None)
+        self.assertEqual(config.enabled_connectors(), [TOP])
+
+    def test_external_only_is_not_given_the_bottom_panel(self):
+        self.monitors["HDMI-1"] = multi_mon("HDMI-1", [(1920, 1080, 60.0)], "ACR", "KA272")
+        self.monitors[TOP]["modes"][0]["is_current"] = False
+        live = [logical(0, 0, 1.0, ["HDMI-1"], primary=True)]
+        config = displayctl.recordable(self.monitors, live, PROPS, True, self.stacked)
+        self.assertEqual(config.enabled_connectors(), ["HDMI-1"])
+
+    def test_with_the_dock_policy_off_the_screen_is_the_users_choice(self):
+        with mock.patch.dict(os.environ, {"ZENDUO_DOCK_POLICY": "0"}):
+            config = displayctl.recordable(self.monitors, self.docked_live, PROPS,
+                                           True, self.stacked)
+        self.assertEqual(config.enabled_connectors(), [TOP])
 
 
 if __name__ == "__main__":

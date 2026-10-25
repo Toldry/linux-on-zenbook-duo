@@ -18,13 +18,16 @@ usage() {
 }
 
 # Every element name mutter's monitors.xml parser knows
-# (src/backends/meta-monitor-config-store.c, read 2026-09-12). A file is only
-# installed if it uses nothing else: the greeter's Mutter parses it as root's
-# own display config, so "it came from the user" is not on its own enough.
-XML_TAGS="monitors configuration logicalmonitor x y scale primary presentation
-transform rotation flipped monitor monitorspec connector vendor product serial
-mode width height rate ratemode flag underscanning maxbpc rgbrange disabled
-policy stores store dbus migrated"
+# (src/backends/meta-monitor-config-store.c, read 2026-09-12, and again on the
+# main branch 2026-10-25, which added layoutmode, colormode and forlease —
+# GNOME 50 writes <layoutmode> into every entry, so without it the greeter's
+# copy was never updated). A file is only installed if it uses nothing else:
+# the greeter's Mutter parses it as root's own display config, so "it came
+# from the user" is not on its own enough.
+XML_TAGS="monitors configuration layoutmode logicalmonitor x y scale primary
+presentation transform rotation flipped monitor monitorspec connector vendor
+product serial mode width height rate ratemode flag underscanning maxbpc
+rgbrange colormode disabled forlease policy stores store dbus migrated"
 
 case "${1:-}" in
   backlight)

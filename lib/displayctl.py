@@ -497,10 +497,87 @@ def build_from_stored(config, monitors, properties, drop=()):
                         prefer_modes=config.modes())
 
 
+def as_configuration(monitors, logicals, layout_mode=None):
+    """An ApplyMonitorsConfig logical list, as a monitors.xml configuration.
+
+    The mode of each monitor is looked up by its id in live state, so it works
+    for a monitor that is not lit right now (and so has no current mode).
+    """
+    out, enabled = [], set()
+    for (x, y, scale, transform, primary, mons) in logicals:
+        entries = []
+        for (connector, mode_id, _props) in mons:
+            mon = monitors[connector]
+            m = next(m for m in mon["modes"] if m["id"] == mode_id)
+            entries.append(monitors_xml.MonitorEntry(
+                monitors_xml.Spec(connector, mon["vendor"], mon["product"],
+                                  mon["serial"]),
+                monitors_xml.Mode(m["width"], m["height"], m["refresh"],
+                                  m.get("interlace", False),
+                                  m.get("variable", False)),
+                mon.get("underscanning", False)))
+            enabled.add(connector)
+        out.append(monitors_xml.Logical(x, y, scale, transform, primary,
+                                        False, entries))
+    disabled = [monitors_xml.Spec(c, mon["vendor"], mon["product"], mon["serial"])
+                for c, mon in monitors.items() if c not in enabled]
+    return monitors_xml.Configuration(out, disabled, layout_mode)
+
+
+def recordable(monitors, logical_monitors, properties, docked, stored):
+    """The configuration to remember for what is on screen now.
+
+    Docked and undocked are the SAME monitor set to Mutter (the bottom panel
+    stays connected under the keyboard), so there is one entry for both. A
+    plain snapshot taken while docked has the bottom panel off, and recording
+    it overwrote the stacked layout the user chose undocked, so the next boot
+    without the keyboard on the panel could only come back with the bottom
+    screen dark (the daemon relights it on a real undock edge, never at
+    startup). Seen in a user's journal 2026-10-25: "remembered ... eDP-2 off"
+    while docked, then a boot undocked that came up without the stacked
+    200% layout.
+
+    So while the dock policy is what keeps the bottom panel off, it is
+    recorded as it was last remembered (its scale, rotation and mode), stacked
+    under the top panel; everything else is taken from the screen. Mutter
+    then restores both panels on an undocked boot, and on a docked one the
+    dock policy turns the bottom panel off again within a second. Nothing is
+    added when the top panel is off too (external only): undocking does not
+    relight the bottom panel then either.
+    """
+    layout_mode = monitors_xml.layout_mode_name(properties)
+    config = monitors_xml.snapshot(monitors, logical_monitors, layout_mode)
+    enabled = config.enabled_connectors()
+    if (not docked or os.environ.get("ZENDUO_DOCK_POLICY", "1") != "1"
+            or BOTTOM not in monitors or BOTTOM in enabled or TOP not in enabled
+            or stored is None or stored.is_mirrored() or config.is_mirrored()):
+        return config
+    remembered = [lm for lm in monitors_xml.as_logical_monitors(stored)
+                  if [spec[0] for spec in lm[5]] == [BOTTOM]]
+    if not remembered:
+        return config  # the bottom panel was off in the remembered layout too
+    want = order_connectors(enabled + [BOTTOM])
+    try:
+        logicals = build_config(monitors, list(logical_monitors) + remembered,
+                                properties, want,
+                                prefer_modes={BOTTOM: stored.modes().get(BOTTOM)})
+    except DisplayCtlError:
+        return config
+    return as_configuration(monitors, logicals, layout_mode)
+
+
 def remember_current(p, quiet=False):
     """Record the layout Mutter is running as the one for this monitor set."""
-    _serial, monitors_raw, logical_raw, _properties = get_state(p)
-    config = monitors_xml.snapshot(parse_monitors(monitors_raw), logical_raw)
+    _serial, monitors_raw, logical_raw, properties = get_state(p)
+    monitors = parse_monitors(monitors_raw)
+    layout_mode = monitors_xml.layout_mode_name(properties)
+    try:
+        stored = monitors_xml.stored_for(monitors_xml.topology(monitors),
+                                         layout_mode=layout_mode)
+    except (monitors_xml.FormatError, OSError):
+        stored = None
+    config = recordable(monitors, logical_raw, properties,
+                        dock.keyboard_docked(), stored)
     if not config.logicals:
         return False
     try:
@@ -513,22 +590,26 @@ def remember_current(p, quiet=False):
     return changed
 
 
-def layout_show(monitors, logical_monitors, enabled, key, docked):
-    live = monitors_xml.snapshot(monitors, logical_monitors)
+def layout_show(monitors, logical_monitors, properties, enabled, key, docked):
+    layout_mode = monitors_xml.layout_mode_name(properties)
+    live = monitors_xml.snapshot(monitors, logical_monitors, layout_mode)
+    shown_as = live  # what would be recorded for this screen (see recordable)
     print("monitor set : " + " · ".join(
         monitors_xml.Spec(*spec).describe() for spec in key))
     print("on screen   : " + live.describe())
     print("mode        : " + (detect_layout(monitors, logical_monitors, enabled,
                                             docked) or "custom"))
     try:
-        stored = monitors_xml.stored_for(key)
+        stored = monitors_xml.stored_for(key, layout_mode=layout_mode)
     except monitors_xml.FormatError as e:
         print(f"remembered  : cannot tell — {e}")
         return 0
+    if stored is not None:
+        shown_as = recordable(monitors, logical_monitors, properties, docked, stored)
     if stored is None:
         print("remembered  : nothing yet for this set — choose a layout and it "
               "is recorded (or `duo layout remember`)")
-    elif stored.shape() == live.shape():
+    elif stored.shape() == shown_as.shape():
         print("remembered  : this layout (it comes back on its own)")
     else:
         print("remembered  : " + stored.describe())
@@ -559,7 +640,7 @@ def cmd_layout(argv):
     docked = dock.keyboard_docked()
 
     if verb == "show":
-        return layout_show(monitors, logical_raw, enabled, key, docked)
+        return layout_show(monitors, logical_raw, properties, enabled, key, docked)
     if verb == "forget":
         if monitors_xml.forget(key):
             print("layout: forgotten for this monitor set — GNOME's own default "
