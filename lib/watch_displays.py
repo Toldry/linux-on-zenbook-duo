@@ -237,15 +237,21 @@ class Watcher:
             # verb that records, and it records at the moment it runs.
             return GLib.SOURCE_REMOVE
         try:
-            _serial, monitors_raw, logical_raw, _properties = displayctl.get_state(
+            _serial, monitors_raw, logical_raw, properties = displayctl.get_state(
                 self.proxy())
         except displayctl.DisplayCtlError:
             return GLib.SOURCE_REMOVE  # the next converge will come back to this
-        config = monitors_xml.snapshot(displayctl.parse_monitors(monitors_raw),
-                                       logical_raw)
-        if not config.logicals:
-            return GLib.SOURCE_REMOVE
+        monitors = displayctl.parse_monitors(monitors_raw)
         try:
+            stored = monitors_xml.stored_for(
+                monitors_xml.topology(monitors),
+                layout_mode=monitors_xml.layout_mode_name(properties))
+            # Docked, the bottom panel is off because of the dock policy, not
+            # because the user turned it off: keep it in what is remembered.
+            config = displayctl.recordable(monitors, logical_raw, properties,
+                                           self.docked, stored)
+            if not config.logicals:
+                return GLib.SOURCE_REMOVE
             changed = monitors_xml.remember(config)
         except (monitors_xml.FormatError, OSError) as e:
             if not self._announced_memory_error:
@@ -310,7 +316,9 @@ class Watcher:
     def restore_remembered(self, serial, monitors, logical_raw, properties):
         """Put this monitor set's remembered layout back. True if it applied."""
         try:
-            stored = monitors_xml.stored_for(self._topology)
+            stored = monitors_xml.stored_for(
+                self._topology,
+                layout_mode=monitors_xml.layout_mode_name(properties))
         except (monitors_xml.FormatError, OSError) as e:
             if not self._announced_memory_error:
                 self._announced_memory_error = True
@@ -329,7 +337,8 @@ class Watcher:
         except displayctl.DisplayCtlError as e:
             log(f"remembered layout does not fit this machine: {e}")
             return False
-        live = monitors_xml.snapshot(monitors, logical_raw)
+        live = monitors_xml.snapshot(monitors, logical_raw,
+                                     monitors_xml.layout_mode_name(properties))
         if displayctl.logicals_shape(logicals) == live.shape():
             return False  # already exactly this; nothing to do
         if self.storming():

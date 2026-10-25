@@ -163,6 +163,11 @@ changes, the same layouts are installed for it (`LOGIN_SCREEN_LAYOUT=1`, via
 the root helper — the greeter's own file is kept as
 `monitors.xml.zenduo-backup` and `./uninstall.sh --system` puts it back).
 
+Docked and undocked are the same set of monitors to GNOME, so they share one
+remembered layout. While docked, the bottom panel is kept in it as it was
+last time it was on, so docking never erases the stacked layout you use
+without the keyboard on the panel.
+
 Two things are deliberately not remembered: a layout you nudged with
 `duo top/bottom/both/toggle` or the second-screen key, because those lapse at
 the next dock change by design, and anything applied while the daemon is

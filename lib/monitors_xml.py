@@ -39,6 +39,14 @@ serial, all four, exactly as `meta_monitor_spec_equals` compares them. The two
 Duo panels are indistinguishable but for the connector (both report
 SDC 0x41a0 with an empty serial), which is why the connector is part of it.
 
+`<layoutmode>` is part of Mutter's key too (meta_monitors_config_key_equal,
+src/backends/meta-monitor-config-manager.c, main branch, read 2026-10-25): it
+writes one entry per monitor set per layout mode, and an entry without the
+element is loaded under BOTH modes and the file rewritten. Every entry this
+module writes carries the mode Mutter reported, and lookups prefer the entry
+for that mode, so a stale "physical" twin is never mistaken for the layout in
+use. `<colormode>` (parsed by the same file) is carried over like maxbpc.
+
 Caveats, both documented rather than worked around:
   * Mutter loads this file once at session start and rewrites the whole thing
     from memory when GNOME Settings persists a layout, so entries added here
@@ -58,6 +66,13 @@ import xml.etree.ElementTree as ET
 from xml.sax.saxutils import escape
 
 VERSION = "2"
+
+# MetaLogicalMonitorLayoutMode as GetCurrentState's "layout-mode" reports it,
+# and as monitors.xml spells it.
+LAYOUT_MODES = {1: "logical", 2: "physical"}
+
+# Per-monitor elements GetCurrentState does not report; kept verbatim.
+MONITOR_EXTRAS = ("maxbpc", "rgbrange", "colormode")
 
 # MetaMonitorTransform: 0-3 are the rotations, +4 is the flipped variant.
 ROTATIONS = ("normal", "left", "upside_down", "right")
@@ -128,7 +143,7 @@ class MonitorEntry:
         self.spec, self.mode = spec, mode
         self.underscanning = bool(underscanning)
         # Raw XML fragments for elements GetCurrentState cannot tell us about
-        # (maxbpc, rgbrange): preserved verbatim across a rewrite.
+        # (MONITOR_EXTRAS): preserved verbatim across a rewrite.
         self.extras = list(extras)
 
 
@@ -148,10 +163,16 @@ class Logical:
         return [m.spec.connector for m in self.monitors]
 
 
+def layout_mode_name(properties):
+    """GetCurrentState's properties -> "logical" / "physical" / None."""
+    return LAYOUT_MODES.get(int(properties.get("layout-mode", 0) or 0))
+
+
 class Configuration:
-    def __init__(self, logicals=(), disabled=()):
+    def __init__(self, logicals=(), disabled=(), layout_mode=None):
         self.logicals = list(logicals)
         self.disabled = list(disabled)
+        self.layout_mode = layout_mode  # "logical", "physical", or None (absent)
 
     def specs(self):
         out = [m.spec for lm in self.logicals for m in lm.monitors]
@@ -214,21 +235,40 @@ class Store:
         # rewrite never drops a setting this module does not model.
         self.extra = list(extra)
 
-    def find(self, key):
-        for config in self.configurations:
-            if config.key() == key:
-                return config
-        return None
+    def _index(self, key, layout_mode):
+        """(index, rank) of the entry for this monitor set, or (None, None).
+
+        Rank 0 is the same layout mode, 1 an entry with no mode (Mutter loads
+        those under both), 2 the other mode. Reading a twin beats reading
+        nothing, but replace() never overwrites one.
+        """
+        best = (None, None)
+        for i, config in enumerate(self.configurations):
+            if config.key() != key:
+                continue
+            if layout_mode is None or config.layout_mode == layout_mode:
+                rank = 0
+            elif config.layout_mode is None:
+                rank = 1
+            else:
+                rank = 2
+            if best[1] is None or rank < best[1]:
+                best = (i, rank)
+        return best
+
+    def find(self, key, layout_mode=None):
+        i, _rank = self._index(key, layout_mode)
+        return None if i is None else self.configurations[i]
 
     def replace(self, config):
-        """Put `config` in, replacing any entry for the same monitor set.
+        """Put `config` in, replacing the entry for the same monitor set and
+        layout mode. An entry for the other layout mode is left alone.
 
         Returns True if the store changed.
         """
-        key = config.key()
-        for i, existing in enumerate(self.configurations):
-            if existing.key() != key:
-                continue
+        i, rank = self._index(config.key(), config.layout_mode)
+        if i is not None and rank < 2:
+            existing = self.configurations[i]
             # Carry over BEFORE comparing. A fresh snapshot never has the
             # maxbpc/presentation bits, so compared raw it differed from an
             # entry that had them on every settle: "remembered" was logged and
@@ -248,7 +288,7 @@ class Store:
 
 
 def _carry_over(old, new):
-    """Keep what GetCurrentState cannot see: maxbpc, rgbrange, presentation."""
+    """Keep what GetCurrentState cannot see: MONITOR_EXTRAS, presentation."""
     old_extras = {m.spec.connector: m.extras for lm in old.logicals
                   for m in lm.monitors}
     old_presentation = {tuple(sorted(lm.connectors)): lm.presentation
@@ -295,7 +335,7 @@ def _parse_monitor(element):
                     variable=_text(mode_el, "ratemode") == "variable")
     extras = [ET.tostring(child, encoding="unicode").strip()
               for child in element
-              if child.tag in ("maxbpc", "rgbrange")]
+              if child.tag in MONITOR_EXTRAS]
     spec_el = element.find("monitorspec")
     spec = _parse_spec(spec_el) if spec_el is not None else Spec("")
     return MonitorEntry(spec, mode, _bool(element, "underscanning"), extras)
@@ -338,7 +378,10 @@ def parse(text):
         for disabled_el in child.findall("disabled"):
             disabled.extend(_parse_spec(s)
                             for s in disabled_el.findall("monitorspec"))
-        configurations.append(Configuration(logicals, disabled))
+        layout_mode = _text(child, "layoutmode")
+        if layout_mode not in LAYOUT_MODES.values():
+            layout_mode = None
+        configurations.append(Configuration(logicals, disabled, layout_mode))
     return Store(configurations, extra)
 
 
@@ -396,6 +439,8 @@ def _logical_xml(logical):
 
 def render_configuration(config):
     out = ["  <configuration>"]
+    if config.layout_mode:
+        out.append(f"    <layoutmode>{config.layout_mode}</layoutmode>")
     for logical in config.logicals:
         out.extend(_logical_xml(logical))
     if config.disabled:
@@ -418,7 +463,7 @@ def render(store):
 
 # ── the live layout, as a configuration ──────────────────────────────────────
 
-def snapshot(monitors, logical_monitors):
+def snapshot(monitors, logical_monitors, layout_mode=None):
     """Build a Configuration from what Mutter reports it is running.
 
     `monitors` is displayctl.parse_monitors output; `logical_monitors` is the
@@ -446,7 +491,7 @@ def snapshot(monitors, logical_monitors):
     enabled = {c for lm in logicals for c in lm.connectors}
     disabled = [Spec(connector, mon["vendor"], mon["product"], mon["serial"])
                 for connector, mon in monitors.items() if connector not in enabled]
-    return Configuration(logicals, disabled)
+    return Configuration(logicals, disabled, layout_mode)
 
 
 def topology(monitors):
@@ -592,8 +637,8 @@ def remember(config, file_path=None):
     return True
 
 
-def stored_for(key, file_path=None):
-    return load(file_path or path()).find(key)
+def stored_for(key, file_path=None, layout_mode=None):
+    return load(file_path or path()).find(key, layout_mode)
 
 
 def forget(key, file_path=None):

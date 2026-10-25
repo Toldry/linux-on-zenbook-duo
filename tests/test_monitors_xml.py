@@ -481,5 +481,58 @@ class LoginScreen(unittest.TestCase):
         self.assertIsNone(mx.login_screen_state(self.ours))
 
 
+class LayoutModes(unittest.TestCase):
+    """<layoutmode> is part of Mutter's key: one entry per set per mode."""
+
+    def setUp(self):
+        self.monitors = {"eDP-1": monitor("eDP-1"), "eDP-2": monitor("eDP-2")}
+
+    def config(self, enabled, layout_mode):
+        live = [logical(0, 900 * i, 2.0, [c], primary=(i == 0))
+                for i, c in enumerate(enabled)]
+        return mx.snapshot(self.monitors, live, layout_mode)
+
+    def test_layout_mode_round_trips_and_comes_first(self):
+        text = mx.render(mx.Store([self.config(["eDP-1"], "logical")]))
+        self.assertIn("  <configuration>\n    <layoutmode>logical</layoutmode>\n", text)
+        self.assertEqual(mx.parse(text).configurations[0].layout_mode, "logical")
+
+    def test_layout_mode_name_reads_getcurrentstate(self):
+        self.assertEqual(mx.layout_mode_name({"layout-mode": 1}), "logical")
+        self.assertEqual(mx.layout_mode_name({"layout-mode": 2}), "physical")
+        self.assertIsNone(mx.layout_mode_name({}))
+
+    def test_find_prefers_the_entry_for_the_mode_in_use(self):
+        # What Mutter wrote on the user's machine: a stale docked entry kept
+        # as a "physical" twin next to the stacked "logical" layout.
+        twin = self.config(["eDP-1"], "physical")
+        stacked = self.config(["eDP-1", "eDP-2"], "logical")
+        store = mx.Store([twin, stacked])
+        self.assertIs(store.find(stacked.key(), "logical"), stacked)
+        self.assertIs(store.find(stacked.key(), "physical"), twin)
+
+    def test_replace_leaves_the_other_modes_twin_alone(self):
+        twin = self.config(["eDP-1"], "physical")
+        store = mx.Store([twin])
+        self.assertTrue(store.replace(self.config(["eDP-1", "eDP-2"], "logical")))
+        self.assertEqual([c.layout_mode for c in store.configurations],
+                         ["physical", "logical"])
+        self.assertEqual(store.configurations[0].enabled_connectors(), ["eDP-1"])
+
+    def test_replace_takes_over_an_entry_without_a_mode(self):
+        store = mx.Store([self.config(["eDP-1"], None)])
+        self.assertTrue(store.replace(self.config(["eDP-1", "eDP-2"], "logical")))
+        self.assertEqual(len(store.configurations), 1)
+        self.assertEqual(store.configurations[0].layout_mode, "logical")
+
+    def test_colormode_survives_a_rewrite(self):
+        text = mx.render(mx.Store([self.config(["eDP-1"], "logical")]))
+        text = text.replace("        </mode>\n",
+                            "        </mode>\n        <colormode>bt2100</colormode>\n", 1)
+        store = mx.parse(text)
+        store.replace(self.config(["eDP-1"], "logical"))
+        self.assertIn("<colormode>bt2100</colormode>", mx.render(store))
+
+
 if __name__ == "__main__":
     unittest.main()

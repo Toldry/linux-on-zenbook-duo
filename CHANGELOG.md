@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### Docking no longer erases the layout you chose undocked
+
+- docked and undocked are the same monitor set to GNOME (the bottom panel
+  stays connected under the keyboard), so there is one remembered layout for
+  both. `watch-displays` recorded the docked screen as it was, bottom panel
+  off, and that replaced the stacked layout chosen without the keyboard on
+  the panel. The next boot undocked could not bring that layout back
+- while docked, the bottom panel is now remembered as it last was (scale,
+  rotation, mode), stacked under the top panel. Everything else still comes
+  from the screen. A docked boot lights it for a moment before the dock
+  policy turns it off, as it already did after a layout chosen undocked
+- `monitors.xml` entries keep `<layoutmode>` and `<colormode>`, and lookups
+  prefer the entry for the layout mode in use. Before, every entry written
+  lost its layout mode, so GNOME loaded it under both modes, and a stale
+  "physical" twin could be read back as the remembered layout
+
 ### Brightness keys work on GNOME 49 and later
 
 - GNOME 49 moved backlight control from gnome-settings-daemon into Mutter and
