@@ -7,6 +7,7 @@ the round-trip tests, and the guard in save().
 """
 
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -532,6 +533,30 @@ class LayoutModes(unittest.TestCase):
         store = mx.parse(text)
         store.replace(self.config(["eDP-1"], "logical"))
         self.assertIn("<colormode>bt2100</colormode>", mx.render(store))
+
+
+class LoginScreenHelper(unittest.TestCase):
+    """helper/zenduo-helper refuses a file with an element it does not know,
+    and Mutter's own <layoutmode> (GNOME 50) once made it refuse every file."""
+
+    def helper_tags(self):
+        helper = os.path.join(os.path.dirname(__file__), "..", "helper", "zenduo-helper")
+        with open(helper) as f:
+            text = f.read()
+        start = text.index('XML_TAGS="') + len('XML_TAGS="')
+        return set(text[start:text.index('"', start)].split())
+
+    def test_everything_mutter_and_we_write_is_allowed(self):
+        tags = self.helper_tags()
+        for tag in ("layoutmode", "colormode", "forlease"):
+            self.assertIn(tag, tags)
+        monitors = {"eDP-1": monitor("eDP-1"), "eDP-2": monitor("eDP-2")}
+        config = mx.snapshot(monitors, [logical(0, 0, 2.0, ["eDP-1"], primary=True,
+                                                transform=1)], "logical")
+        config.logicals[0].monitors[0].extras = ["<colormode>bt2100</colormode>"]
+        text = mx.render(mx.Store([config]))
+        written = set(re.findall(r"</?([a-zA-Z]+)", text))
+        self.assertLessEqual(written, tags, written - tags)
 
 
 if __name__ == "__main__":
