@@ -484,5 +484,41 @@ class Recordable(unittest.TestCase):
         self.assertEqual(config.enabled_connectors(), [TOP])
 
 
+class RememberedReference(unittest.TestCase):
+    """A panel switched on comes back at its remembered scale. Undocking used
+    build_config with only what was lit, so the bottom panel came back at
+    Mutter's preferred 166% (a user's journal, 2026-10-29)."""
+
+    def setUp(self):
+        self.monitors = {TOP: multi_mon(TOP, [(2880, 1800, 120.0)]),
+                         BOTTOM: multi_mon(BOTTOM, [(2880, 1800, 120.0)])}
+        for m in self.monitors.values():
+            m["modes"][0]["preferred_scale"] = 1.6666666269302368
+        self.stored = monitors_xml.snapshot(
+            self.monitors,
+            [logical(0, 0, 2.0, [TOP], primary=True), logical(0, 900, 2.0, [BOTTOM])],
+            "logical")
+        self.top_only = [logical(0, 0, 2.0, [TOP], primary=True)]
+
+    def test_undocking_brings_the_bottom_panel_back_at_its_remembered_scale(self):
+        reference, prefer = displayctl.remembered_reference(self.top_only, self.stored)
+        logicals = displayctl.build_config(self.monitors, reference, PROPS,
+                                           [TOP, BOTTOM], prefer_modes=prefer)
+        self.assertEqual(displayctl.logicals_shape(logicals), self.stored.shape())
+        self.assertIn(BOTTOM, prefer)
+
+    def test_what_is_lit_keeps_its_live_settings(self):
+        live = [logical(0, 0, 1.5, [TOP], primary=True)]
+        reference, prefer = displayctl.remembered_reference(live, self.stored)
+        self.assertNotIn(TOP, prefer)
+        logicals = displayctl.build_config(self.monitors, reference, PROPS,
+                                           [TOP, BOTTOM], prefer_modes=prefer)
+        self.assertEqual({lm[5][0][0]: lm[2] for lm in logicals}, {TOP: 1.5, BOTTOM: 2.0})
+
+    def test_nothing_remembered_changes_nothing(self):
+        self.assertEqual(displayctl.remembered_reference(self.top_only, None),
+                         (self.top_only, {}))
+
+
 if __name__ == "__main__":
     unittest.main()

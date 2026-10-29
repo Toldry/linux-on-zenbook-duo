@@ -524,6 +524,38 @@ def as_configuration(monitors, logicals, layout_mode=None):
     return monitors_xml.Configuration(out, disabled, layout_mode)
 
 
+def remembered_reference(logical_monitors, stored):
+    """Live logical monitors plus remembered ones for panels that are off now.
+
+    build_config takes each monitor's scale and rotation from the reference
+    it is handed, and a monitor that is off has none on screen, so turning
+    one on fell back to Mutter's preferred scale: undocking brought the
+    bottom panel back at 166% under a top panel at 200% (a user's journal,
+    2026-10-29: "undocked, bringing the bottom panel back" followed by
+    "remembered ... eDP-2 ... scale 1.6666666269302368"). Returns the
+    reference and the remembered modes, for build_config's prefer_modes.
+    """
+    if stored is None or stored.is_mirrored():
+        return list(logical_monitors), {}
+    lit = set(enabled_connectors(logical_monitors))
+    extra = [lm for lm in monitors_xml.as_logical_monitors(stored)
+             if not lit & {spec[0] for spec in lm[5]}]
+    modes = stored.modes()
+    prefer = {spec[0]: modes[spec[0]] for lm in extra for spec in lm[5]
+              if modes.get(spec[0]) is not None}
+    return list(logical_monitors) + extra, prefer
+
+
+def stored_now(monitors, properties):
+    """The remembered layout for the monitors connected now, or None."""
+    try:
+        return monitors_xml.stored_for(
+            monitors_xml.topology(monitors),
+            layout_mode=monitors_xml.layout_mode_name(properties))
+    except (monitors_xml.FormatError, OSError):
+        return None
+
+
 def recordable(monitors, logical_monitors, properties, docked, stored):
     """The configuration to remember for what is on screen now.
 
@@ -552,15 +584,13 @@ def recordable(monitors, logical_monitors, properties, docked, stored):
             or BOTTOM not in monitors or BOTTOM in enabled or TOP not in enabled
             or stored is None or stored.is_mirrored() or config.is_mirrored()):
         return config
-    remembered = [lm for lm in monitors_xml.as_logical_monitors(stored)
-                  if [spec[0] for spec in lm[5]] == [BOTTOM]]
-    if not remembered:
+    if BOTTOM not in stored.enabled_connectors():
         return config  # the bottom panel was off in the remembered layout too
+    reference, prefer = remembered_reference(logical_monitors, stored)
     want = order_connectors(enabled + [BOTTOM])
     try:
-        logicals = build_config(monitors, list(logical_monitors) + remembered,
-                                properties, want,
-                                prefer_modes={BOTTOM: stored.modes().get(BOTTOM)})
+        logicals = build_config(monitors, reference, properties, want,
+                                prefer_modes=prefer)
     except DisplayCtlError:
         return config
     return as_configuration(monitors, logicals, layout_mode)
@@ -570,14 +600,8 @@ def remember_current(p, quiet=False):
     """Record the layout Mutter is running as the one for this monitor set."""
     _serial, monitors_raw, logical_raw, properties = get_state(p)
     monitors = parse_monitors(monitors_raw)
-    layout_mode = monitors_xml.layout_mode_name(properties)
-    try:
-        stored = monitors_xml.stored_for(monitors_xml.topology(monitors),
-                                         layout_mode=layout_mode)
-    except (monitors_xml.FormatError, OSError):
-        stored = None
     config = recordable(monitors, logical_raw, properties,
-                        dock.keyboard_docked(), stored)
+                        dock.keyboard_docked(), stored_now(monitors, properties))
     if not config.logicals:
         return False
     try:
@@ -828,7 +852,12 @@ def run(argv):
         want = want + external
 
     want = order_connectors(want)
-    logicals = build_config(monitors, logical_raw, properties, want)
+    # A panel switched on comes back as it was last remembered, not at
+    # Mutter's preferred scale.
+    reference, prefer = remembered_reference(logical_raw,
+                                             stored_now(monitors, properties))
+    logicals = build_config(monitors, reference, properties, want,
+                            prefer_modes=prefer)
     apply_config(p, serial, logicals, dry_run=dry_run)
     if not dry_run:
         # A hand-issued layout outranks the dock policy until the keyboard is

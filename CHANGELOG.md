@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### A panel switched back on keeps its remembered scale
+
+- undocking, `duo both`, `duo toggle` and the second-screen key turned the
+  bottom panel on at Mutter's preferred scale (166% on this panel), because
+  a panel that is off has no scale on screen to copy. The 166% was then
+  remembered too. They now take the scale, rotation and mode the remembered
+  layout has for it
+
 ### Docking no longer erases the layout you chose undocked
 
 - docked and undocked are the same monitor set to GNOME (the bottom panel
