@@ -561,8 +561,13 @@ class Watcher:
         # Externals keep their own positions; build_config re-places them only
         # if the new internal stack would collide with where they already are.
         want = displayctl.order_connectors(want)
+        # The bottom panel comes back at its remembered scale, not Mutter's
+        # preferred one (166% on this panel).
+        reference, prefer = displayctl.remembered_reference(
+            logical_raw, displayctl.stored_now(monitors, properties))
         try:
-            logicals = displayctl.build_config(monitors, logical_raw, properties, want)
+            logicals = displayctl.build_config(monitors, reference, properties, want,
+                                               prefer_modes=prefer)
             displayctl.apply_config(p, serial, logicals)
         except displayctl.DisplayCtlError as e:
             self._pending_undock = not self.docked  # unfinished edge: try again
