@@ -202,17 +202,28 @@ class Watcher:
 
         The bottom panel comes back at whatever level it was last left at —
         typically full brightness against a dimmed top panel, which is jarring
-        the moment you undock. Strictly best effort and never blocking: the
-        sync needs the root helper (system/50-sudoers.sh), and a machine
-        without it must still get the layout change.
+        the moment you undock. Strictly best effort and never blocking.
+
+        Through Mutter first (`brightness match`). GNOME 50 keeps a level per
+        panel and applies the slider as a factor on top, so copying the top
+        panel's sysfs value (slider included) into the bottom one through the
+        root helper left the bottom panel's own level lower for good: the
+        brightness keys then dimmed both by the same factor and the bottom
+        never caught up, which reads as "the keys only change the top panel".
+        Measured 2026-10-29: Mutter levels 400 / 308 after an undock, sysfs
+        400 -> 340 and 308 -> 262 after three key presses. A freshly enabled
+        panel may not be active in Mutter for a moment, hence one retry; the
+        sysfs copy is the fallback for a GNOME without Mutter backlights.
         """
+        script = ('"$0" brightness match || { sleep 1; "$0" brightness match; } '
+                  '|| "$0" sync-backlight')
         try:
             self._children.append(subprocess.Popen(
-                [DUO, "sync-backlight"], stdout=subprocess.DEVNULL,
+                ["sh", "-c", script, DUO], stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL, start_new_session=True))
-            log("bottom panel enabled — syncing its backlight to the top panel")
+            log("bottom panel enabled — matching its backlight to the top panel")
         except OSError as e:
-            log(f"could not start sync-backlight: {e}")
+            log(f"could not start the backlight sync: {e}")
 
     def schedule_record(self):
         """(Re)start the settle timer that records the layout on screen."""

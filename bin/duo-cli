@@ -91,6 +91,7 @@ usage: duo-cli <command>        (duo <command> runs the same thing)
   apply-displays         enforce that policy once now (drops any manual override)
   brightness up|down     step both panels' backlight like GNOME's slider (what
                          the brightness keys do on GNOME 49+)
+  brightness match       set the bottom panel to the top panel's level
   sync-backlight [src [dst]]   copy panel backlight percentage src -> dst
   watch-backlight [src [dst]]  daemon: keep dst backlight synced to src
   kb-init                switch the keyboard into hotkey mode (enables Fn/media keys)

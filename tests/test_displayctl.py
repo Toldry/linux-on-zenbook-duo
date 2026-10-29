@@ -411,6 +411,13 @@ class BrightnessStep(unittest.TestCase):
         lights = [{"connector": TOP}, self.light("HDMI-1", 50)]
         self.assertEqual(displayctl.brightness_targets(lights, up=True), {})
 
+    def test_match_sets_the_bottom_panel_to_the_top_panels_level(self):
+        # After an undock the bottom panel sat at 308/400 under a top panel
+        # at 400/400 in Mutter (2026-10-29); the keys then kept that gap.
+        lights = [self.light(TOP, 400, high=400), self.light(BOTTOM, 308, high=400)]
+        self.assertEqual(displayctl.brightness_targets(lights),
+                         {TOP: 400, BOTTOM: 400})
+
     def test_rejects_anything_but_up_or_down(self):
         self.assertEqual(displayctl.run(["brightness", "sideways"]), 64)
 

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### The bottom panel's brightness is matched through GNOME after undocking
+
+- undocking copied the top panel's backlight to the bottom one through
+  sysfs. GNOME 50 keeps its own level per panel and applies the brightness
+  slider on top, so the bottom panel kept a lower level of its own and the
+  brightness keys dimmed both by the same factor without ever bringing them
+  together. It looked like the keys only changed the top panel. The match
+  now goes through Mutter (`duo brightness match`), with the sysfs copy as
+  the fallback
+
 ### A panel switched back on keeps its remembered scale
 
 - undocking, `duo both`, `duo toggle` and the second-screen key turned the
