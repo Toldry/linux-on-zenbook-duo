@@ -16,6 +16,7 @@ Commands:
                        show | laptop | external | extend | mirror | cycle |
                        remember | forget
     brightness up|down step both panels' backlight one GNOME slider step
+    brightness match   set the bottom panel to the top panel's level
                        through Mutter (GNOME 49+, where gsd-power no longer does it)
 
 Safety invariant (docs/DESIGN.md, R10): any configuration that would leave ZERO
@@ -713,8 +714,11 @@ def cmd_layout(argv):
 BRIGHTNESS_STEPS = 20
 
 
-def brightness_targets(lights, up):
+def brightness_targets(lights, up=None):
     """The SetBacklight values for one brightness-key press: {connector: value}.
+
+    `up=None` is no step at all: every panel is set to the top panel's level
+    (`brightness match`).
 
     `lights` is Mutter's Backlight property. The top panel's level moves by
     one of GNOME Shell's slider steps, and every other active internal panel
@@ -732,7 +736,7 @@ def brightness_targets(lights, up):
               and light.get("active", True) and light["max"] > light["min"]}
     if TOP not in usable:
         return {}
-    step = 1.0 / BRIGHTNESS_STEPS
+    step = 0.0 if up is None else 1.0 / BRIGHTNESS_STEPS
     target = fraction(usable[TOP]) + (step if up else -step)
     target = min(1.0, max(0.0, target))
     return {connector: round(light["min"] + target * (light["max"] - light["min"]))
@@ -748,7 +752,7 @@ def cmd_brightness(args):
     Mutter directly. GNOME Shell sees the change, moves its slider and shows
     its OSD (backlights-changed in js/misc/brightnessManager.js) -- VERIFY-ON-HW.
     """
-    if args not in (["up"], ["down"]):
+    if args not in (["up"], ["down"], ["match"]):
         print(__doc__, file=sys.stderr)
         return 64
     _require_gi()
@@ -761,9 +765,13 @@ def cmd_brightness(args):
         serial, lights = reply.unpack()[0]
     except GLib.Error as e:
         raise DisplayCtlError(f"cannot read Mutter's Backlight property: {e.message}", 1)
-    targets = brightness_targets(lights, up=args == ["up"])
+    targets = brightness_targets(lights, up={"up": True, "down": False}.get(args[0]))
     if not targets:
         raise DisplayCtlError(f"Mutter has no controllable backlight on {TOP}", 1)
+    if args == ["match"] and BOTTOM not in targets:
+        # Just switched on, Mutter may not list it as active yet: fail so
+        # the caller can retry or fall back.
+        raise DisplayCtlError(f"Mutter has no active backlight on {BOTTOM} yet", 1)
     for connector, value in targets.items():
         try:
             bus.call_sync(BUS_NAME, OBJ_PATH, BUS_NAME, "SetBacklight",
