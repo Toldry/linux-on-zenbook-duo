@@ -309,8 +309,9 @@ class IdleOff:
     the keyboard detached and idle). ASUS rates it at more than 24 h with the
     backlight off (https://www.asus.com/support/faq/1051888/). Docked the
     keyboard runs on the laptop's power, so this only acts on Bluetooth.
-    VERIFY-ON-HW: that the keyboard sends no unprompted report besides the
-    vendor 0x3d (any other one would count as typing and keep it lit).
+    Measured 2026-10-30: detached and idle, it went dark after 30 s, so the
+    keyboard sends no unprompted report besides the vendor 0x3d (any other
+    one would count as typing and keep it lit). Battery life is unmeasured.
     """
 
     def __init__(self, timeout):
