@@ -32,6 +32,11 @@ import duo_model as dm  # noqa: E402  (same directory)
 APP_ID = "io.github.zenduo.Duo"
 TITLE = "Zenbook Duo"
 REPO_URL = "https://github.com/Toldry/linux-on-zenbook-duo"
+ABOUT_LINKS = (
+    ("Source code on GitHub", REPO_URL, REPO_URL),
+    ("Report a problem", "attach the output of duo report", REPO_URL + "/issues"),
+    ("What works and what does not", "docs/FEATURES.md", REPO_URL + "/blob/main/docs/FEATURES.md"),
+)
 
 LOG_LINES = 400                 # journal lines the Logs page keeps
 THEME_SECONDS = 2.0             # F7 flips the style behind the window's back
@@ -42,7 +47,7 @@ LAYOUT_BUTTONS = (("Laptop", "laptop"), ("External", "external"), ("Extend", "ex
                   ("Mirror", "mirror"))
 BRIGHTNESS_BUTTONS = (("−", "down"), ("+", "up"), ("Match", "match"))
 
-PAGES = ("overview", "features", "settings", "logs", "doctor")
+PAGES = ("overview", "features", "settings", "logs", "doctor", "about")
 
 # The Settings page, in the order it is shown: (title, description).
 KNOB_GROUPS = (
@@ -242,7 +247,7 @@ def make_app(Adw, Gio, GLib, Gtk, Pango):
         def __init__(self, app, model):
             super().__init__(application=app, title=TITLE)
             self.model = model
-            self.set_default_size(760, 820)
+            self.set_default_size(880, 820)
             self.seen = -1
             self.syncing = False       # rows being set from the model, not by a click
             self.busy = set()          # features with an action in flight
@@ -255,10 +260,6 @@ def make_app(Adw, Gio, GLib, Gtk, Pango):
             header = Adw.HeaderBar()
             header.set_title_widget(Adw.ViewSwitcher(stack=self.stack,
                                                      policy=Adw.ViewSwitcherPolicy.WIDE))
-            about = Gtk.Button(icon_name="help-about-symbolic",
-                               tooltip_text="About, and the project on GitHub")
-            about.connect("clicked", lambda *_: self.about())
-            header.pack_end(about)
             view = Adw.ToolbarView()
             view.add_top_bar(header)
             view.set_content(self.toasts)
@@ -274,6 +275,8 @@ def make_app(Adw, Gio, GLib, Gtk, Pango):
                                             "text-x-generic-symbolic")
             self.stack.add_titled_with_icon(self.doctor_page(), "doctor", "Doctor",
                                             "dialog-information-symbolic")
+            self.stack.add_titled_with_icon(self.about_page(), "about", "About",
+                                            "help-about-symbolic")
             self.stack.connect("notify::visible-child", lambda *_: self.sync(force=True))
 
             keys = Gtk.ShortcutController(scope=Gtk.ShortcutScope.MANAGED)
@@ -333,15 +336,32 @@ def make_app(Adw, Gio, GLib, Gtk, Pango):
             self.get_clipboard().set(text + "\n")
             self.toast(dm.Result(True, "Copy", f"Copied {len(text.splitlines())} {what}"))
 
-        def about(self):
-            dialog = Adw.AboutDialog(
-                application_name=TITLE, application_icon="preferences-desktop-display",
-                version=self.model.version_text, website=REPO_URL,
-                issue_url=REPO_URL + "/issues", license_type=Gtk.License.MIT_X11,
-                comments="Dual screens, keyboard, audio and power for the ASUS Zenbook Duo "
-                         "(2024) on Linux. The same things are in a terminal: duo")
-            dialog.add_link("Source code on GitHub", REPO_URL)
-            dialog.present(self)
+        # ── About ─────────────────────────────────────────────────────────────
+
+        def about_page(self):
+            page = Adw.PreferencesPage()
+            info = Adw.PreferencesGroup(
+                title="linux-on-zenbook-duo",
+                description="Dual screens, keyboard, audio and power for the ASUS Zenbook Duo "
+                            "(2024) on Linux.")
+            for title, value in (("Version", self.model.version_text),
+                                 ("License", "MIT"),
+                                 ("In a terminal", "duo, or duo --help for every command")):
+                row = Adw.ActionRow(title=title, subtitle=value)
+                row.add_css_class("property")
+                info.add(row)
+            page.add(info)
+            links = Adw.PreferencesGroup(title="Links")
+            for title, subtitle, url in ABOUT_LINKS:
+                row = Adw.ActionRow(title=title, subtitle=subtitle, activatable=True)
+                row.add_suffix(Gtk.Image(icon_name="adw-external-link-symbolic"))
+                row.connect("activated", lambda _row, u=url: self.open_url(u))
+                links.add(row)
+            page.add(links)
+            return page
+
+        def open_url(self, url):
+            Gtk.UriLauncher(uri=url).launch(self, None, None, None)
 
         def details(self, result):
             dialog = Adw.AlertDialog(heading=result.title, body=result.output)

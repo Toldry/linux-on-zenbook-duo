@@ -12,8 +12,8 @@
 - Settings speaks plainly: each setting has a title and a sentence for
   someone who has not read the code (the conf key is the tooltip), grouped as
   Screens, Keyboard shortcuts, Brightness and keyboard light, Battery
-- Logs and Doctor have Copy buttons; the header has an About button and
-  Overview a link to the repository
+- Logs and Doctor have Copy buttons; an About page, a tab like the others,
+  and a link under Overview lead to the repository
 
 ### A window for everything, opened with F12
 
