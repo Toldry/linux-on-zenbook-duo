@@ -311,16 +311,25 @@ SCENARIOS = {
         "press the backlight key (F4) once, wait 3 s",
         "press the backlight key (F4) once, wait 3 s",
         "press the backlight key (F4) until it is off",
-        "MyASUS: find the keyboard backlight timeout (how long the keyboard"
-        " light stays on after the last key press) and pick a different value."
-        " Not in your MyASUS? Type s",
-        "MyASUS: set the keyboard backlight timeout back to its old value"
-        " (s if you skipped the step before)",
+        # Menu names read from MyASUS 4.0.81.0 screenshots, 2026-10-30.
+        "MyASUS > Device Settings > Input Device Settings > Keyboard backlight"
+        " sleep mode: pick 'While on battery or on AC power' and a different"
+        " idle time",
+        "same place: put the sleep mode and idle time back as they were",
+        "same tab, Automatic keyboard backlight: switch Smart Switch (light off"
+        " over Bluetooth) to its other state",
+        "same place: switch Smart Switch back",
+        "same place: switch Auto-brighten to its other state",
+        "same place: switch Auto-brighten back",
+        "same place: switch Auto-dim to its other state",
+        "same place: switch Auto-dim back",
+        "cover the light sensor (probably next to the camera above the top screen)"
+        " with a finger for 10 s, then uncover it (Auto-brighten/Auto-dim at work)",
         "press Fn+Esc (Fn-lock) once",
         "press Fn+Esc (Fn-lock) again",
-        "MyASUS: find the function key setting (whether F1-F12 act as F-keys"
-        " or as hotkeys without Fn) and switch it to the other choice",
-        "MyASUS: switch the function key setting back",
+        "same tab, Function key: switch between 'Locked Fn key' and 'Normal Fn"
+        " key'",
+        "same place: switch the Function key setting back",
         "press F9 once",
         "press F11 once",
         "press F12 (MyASUS key) once",
