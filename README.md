@@ -24,6 +24,7 @@ OLED flicker is gone.
 | Bottom panel off while the keyboard is docked, on when lifted; survives suspend, hotplug, lock, GNOME Settings changes | ScreenXpert | `duo watch-displays` | ✅ on hardware, daily since 2026-07-23 |
 | Manual panel control that never blanks the machine; Win+P layouts (external only, mirror) are respected | Win+P | `duo top/bottom/both/toggle` | ✅ |
 | Fn/media keys: brightness (with GNOME's OSD, both panels), second-screen key, keyboard-backlight key; volume/mute are native | ASUS driver | `duo watch-fn` (sends the same handshake the kernel driver would) | ✅ USB and Bluetooth |
+| F7 opens a terminal, F8 toggles dark mode, F12 opens the duo window | — | `duo hotkeys`, `duo watch-fn` | ✅ F7 · 🧪 F8, F12 |
 | Keyboard backlight 0–3, remembered and restored after dock/undock/resume | ASUS driver | `duo kb-backlight` | ✅ |
 | Bottom panel brightness follows the top panel | ASUS driver | brightness keys, `duo sync-backlight`, optional `duo watch-backlight` | ✅ |
 | Battery charge limit (e.g. 80 %) re-applied at every login | MyASUS | `duo bat-limit`, `BATTERY_LIMIT` in the config | ✅ |
@@ -115,6 +116,9 @@ Knobs live in `~/.config/zenduo/zenduo.conf` ([annotated example](config/zenduo.
 | `DOCK_POLICY` | `1` | `0` keeps `watch-displays` running but makes it watch without acting |
 | `REMEMBER_LAYOUT` | `1` | Remember the display layout per set of connected monitors and let GNOME restore it (see below) |
 | `LOGIN_SCREEN_LAYOUT` | `1` | Give the GDM greeter the same layouts, so the password prompt is on the monitor you were using |
+| `F7_TERMINAL` | `1` | F7 (which types Super+P) opens a terminal instead of GNOME's display switcher |
+| `F8_DARK_MODE` | `1` | F8 toggles dark mode |
+| `F12_GUI` | `1` | F12 (the MyASUS key) opens the duo window, and closes it when it is focused |
 
 System-level features are flags on the installer, so they can be switched
 later with the same command that installed them:
@@ -213,6 +217,59 @@ Every action is a `duo-cli` or `systemctl --user` command; the status line
 shows what it printed and a failure opens the full output. `?` lists the keys
 of the view you are on.
 
+## The window
+
+The same things in a GNOME window: `duo gui`, **Zenbook Duo** in the app
+grid, or **F12**. Press F12 again while the window has focus and it closes.
+
+- **Overview**: the panels, keyboard, backlights and battery limit; buttons
+  for the panel sets, the four Win+P layouts and brightness; dark style and
+  the keyboard backlight level; the last problems from the journal.
+- **Features**: every daemon with its state and an on/off switch
+  (`duo enable/disable`) and a restart button; the speaker chain; the system
+  features with the installer flag that changes them.
+- **Settings**: every knob. When the daemon that reads it is running, the
+  window offers to restart it.
+- **Logs** and **Doctor**: the zenduo journal, and `duo doctor` coloured,
+  each with a button that copies what is shown.
+
+Failures pop up with what the command said; a click that worked just shows
+its result on the page. The **About** page (and the link under Overview) leads
+to this repository.
+
+Like the screen, it changes nothing itself: every button is a `duo-cli` or
+`systemctl --user` command, and its toast says what that command printed. It
+needs GTK 4 and libadwaita for python, which the root half installs
+(`python3-gi gir1.2-gtk-4.0 gir1.2-adw-1` on Ubuntu). `duo gui --page logs`
+opens on a page.
+
+F12 is read by `watch-fn` as the vendor report `5a 86`, the code the kernel's
+hid-asus driver calls the MyASUS key. If F12 does nothing, `duo log` names the
+code the key sent, and `duo fn-map` maps it.
+
+### Updating
+
+`duo` runs from a **copy** in `/usr/local/lib/zenduo`, not from your
+checkout, so a `git pull` alone changes nothing that runs. Update with:
+
+```bash
+cd ~/linux-on-zenbook-duo
+git pull
+./install.sh
+```
+
+`./install.sh` copies the new code into place (it asks for your password
+once), installs the window's launcher, and restarts any running `duo-*`
+daemon that started before the code it runs was written, so new keys work
+without logging out. To check that the copy is current:
+
+```bash
+diff -rq --exclude=__pycache__ ~/linux-on-zenbook-duo/lib /usr/local/lib/zenduo/lib && echo up to date
+```
+
+If you change the code often, `sudo ./install.sh --system --dev` links
+`/usr/local/lib/zenduo` to the checkout instead of copying it.
+
 ## Commands
 
 Every command is `duo-cli <command>`; `duo <command>` runs the same thing.
@@ -223,6 +280,9 @@ duo status                 quick glance: panels, keyboard, backlight, battery li
 duo features               every feature with its installed/enabled/running state
 duo enable|disable <f>     turn a feature on/off (and start/stop it now)
 duo config [get K|set K V] the knobs in ~/.config/zenduo/zenduo.conf
+duo gui [--toggle]         the window (F12); --toggle closes it when it is focused
+duo theme [toggle]         light or dark style (F8)
+duo terminal               open the default terminal (F7)
 duo top|bottom|both        enable that panel set (refuses to disable everything);
                            pauses the dock policy until the keyboard docks/undocks
 duo toggle                 bottom panel on <-> off, leaving every other output alone
@@ -357,12 +417,13 @@ dotfiles ([JowiAoun/dome](https://github.com/JowiAoun/dome)) consume it.
 bin/duo-cli              the CLI (bash); every feature is a subcommand
 bin/duo                  the screen (python, curses); `duo <command>` runs `duo-cli <command>`
 lib/duo_tui.py           the screen's views; lib/duo_model.py reads for it and acts through duo-cli
+lib/duo_gui.py           the window (GTK 4 + libadwaita), the same model behind it
 lib/*.py                 the daemons and helpers (python3, stdlib + PyGObject for Mutter)
 lib/conf.sh              the config-file reader
 helper/zenduo-helper     the ONLY root code: two validated verbs, 50 lines
 system/                  the root half: idempotent scripts + lib.sh, run by install.sh
 systemd/user/            the duo-* user units install.sh copies into place
-config/                  annotated zenduo.conf example
+config/                  annotated zenduo.conf example, the window's .desktop launcher
 presets/easyeffects/     the speaker preset, generated from lib/speaker_dsp.py
 nix/                     flake package + home-manager module
 tests/                   bash + python unit tests (make test)

@@ -31,6 +31,7 @@ let
     "ZENDUO_REMEMBER_LAYOUT=${bool01 cfg.rememberLayout}"
     "ZENDUO_LOGIN_SCREEN_LAYOUT=${bool01 cfg.loginScreenLayout}"
     "ZENDUO_TOUCH_MAPPING=${bool01 cfg.touchMapping}"
+    "ZENDUO_F12_GUI=${bool01 cfg.f12Gui}"
   ];
 
   watcher = sub: description: {
@@ -64,6 +65,7 @@ let
     REMEMBER_LAYOUT=${bool01 cfg.rememberLayout}
     LOGIN_SCREEN_LAYOUT=${bool01 cfg.loginScreenLayout}
     TOUCH_MAPPING=${bool01 cfg.touchMapping}
+    F12_GUI=${bool01 cfg.f12Gui}
   '';
 in
 {
@@ -210,6 +212,12 @@ in
       type = lib.types.bool;
       default = true;
       description = "Init the keyboard's hotkey mode on connect and act on its media keys (brightness, panel toggle, kb backlight). Mainline hid-asus lacks this device, so this daemon stands in for it.";
+    };
+
+    f12Gui = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "F12 (the MyASUS key) opens the duo window, and closes it when it is focused. Read by watchFn; the window's launcher comes with the package.";
     };
 
     kbBacklightRestore = lib.mkOption {

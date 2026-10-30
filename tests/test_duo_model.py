@@ -184,6 +184,28 @@ class ValidateTest(unittest.TestCase):
         self.assertNotEqual(dm.validate(dm.KNOB_BY_KEY["BACKLIGHT_SOURCE"], "x;rm -rf /"), "")
 
 
+class F7KnobTest(unittest.TestCase):
+    """F7_TERMINAL is read by the installer only; the window and the screen
+    must move GNOME's shortcut along with the knob, or the switch lies."""
+
+    def test_the_shortcut_follows_the_knob(self):
+        from unittest import mock
+        calls = []
+
+        def fake_cli(*args, timeout=30):
+            calls.append(args)
+            return dm.Result(True, "duo " + " ".join(args), "done")
+        m = dm.Model()
+        with mock.patch.object(dm, "cli", side_effect=fake_cli), \
+                mock.patch.object(dm, "read_config", return_value=("", {}, False, "")):
+            m.config_set("F7_TERMINAL", "0")
+            m.config_set("F7_TERMINAL", "1")
+            m.config_set("F8_DARK_MODE", "0")
+        self.assertEqual(calls, [("config", "set", "F7_TERMINAL", "0"), ("hotkeys", "remove"),
+                                 ("config", "set", "F7_TERMINAL", "1"), ("hotkeys", "apply"),
+                                 ("config", "set", "F8_DARK_MODE", "0")])
+
+
 class ClearTest(unittest.TestCase):
     """`c` on the screen hides what has been read; journald keeps it."""
 

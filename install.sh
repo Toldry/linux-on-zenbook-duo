@@ -163,6 +163,23 @@ user_phase() {
     if [ "$DRY_RUN" = 1 ]; then log "DRY RUN: would set APPLY_METHOD=$APPLY_METHOD"; else conf_set APPLY_METHOD "$APPLY_METHOD"; fi
   fi
 
+  # 1b. the launcher for `duo gui`, so the window is in GNOME's app grid and
+  #     its windows group under one icon (the file is named after APP_ID in
+  #     lib/duo_gui.py). Exec points at the same duo-cli the units run.
+  local apps_dst desktop_src desktop_dst
+  desktop_src="$SRC/config/io.github.zenduo.Duo.desktop"
+  apps_dst="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+  desktop_dst="$apps_dst/$(basename "$desktop_src")"
+  body="$(sed "s|^Exec=/usr/local/bin/duo-cli|Exec=$duo|" "$desktop_src")"
+  if nix_managed "$desktop_dst"; then
+    log "launcher: $desktop_dst is managed by home-manager"
+  elif [ "$(cat "$desktop_dst" 2>/dev/null || true)" = "$body" ]; then
+    log "launcher up to date: $desktop_dst"
+  else
+    log "installing launcher: $desktop_dst"
+    if [ "$DRY_RUN" != 1 ]; then mkdir -p "$apps_dst"; printf '%s\n' "$body" > "$desktop_dst"; fi
+  fi
+
   # 2. units
   if ! systemctl --user show-environment >/dev/null 2>&1; then
     warn "no systemd user session reachable — units not installed (log in graphically and re-run: ./install.sh --user)"
@@ -213,6 +230,27 @@ user_phase() {
   set_feature watch-fn "$WATCH_FN"
   set_feature watch-backlight "$WATCH_BACKLIGHT"
   set_feature watch-rotation "$WATCH_ROTATION"
+  # A running daemon keeps the code it started with, so after an update the
+  # new keys and fixes only arrive with a restart (the stale-copy confusion of
+  # 2026-10-30). Restart a running daemon that started before the code it
+  # runs was last written. Wall time on both sides: a monotonic start stamp
+  # against a file time would be off by every second this laptop slept.
+  local code_dir newest started f
+  code_dir="$(dirname "$(dirname "$(readlink -f "$duo")")")"
+  # (__pycache__ is left out: python writes it as the daemon starts.)
+  newest="$(find "$code_dir/bin" "$code_dir/lib" -name __pycache__ -prune -o -type f -printf '%T@\n' 2>/dev/null \
+            | sort -n | tail -n 1)"
+  newest="${newest%.*}"
+  for f in watch-displays watch-fn watch-backlight watch-rotation; do
+    systemctl --user is-active --quiet "duo-$f.service" 2>/dev/null || continue
+    started="$(systemctl --user show --timestamp=unix -p ActiveEnterTimestamp --value "duo-$f.service" 2>/dev/null || true)"
+    started="${started#@}"
+    case "$started" in ''|*[!0-9]*) continue ;; esac
+    if [ -n "$newest" ] && [ "$started" -lt "$newest" ]; then
+      run systemctl --user restart "duo-$f.service"
+      log "$f: restarted, it was running code older than what is installed"
+    fi
+  done
   if [ -n "$(conf_get BATTERY_LIMIT)" ]; then
     set_feature bat-limit 1 oneshot
     # A limit given on this command line should hold now, not at the next login.
@@ -339,8 +377,8 @@ user_phase() {
     # GNOME's own disable-while-typing switch (the quirk gives it something to act on).
     dconf write /org/gnome/desktop/peripherals/touchpad/disable-while-typing true 2>/dev/null || true
   fi
-  if [ "$(conf_get F7_DARK_MODE 1)" = 1 ] && [ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
-    run python3 "$SRC/lib/hotkeys.py" apply "$duo" || warn "F7 not bound to dark mode: run duo hotkeys apply"
+  if [ "$(conf_get F7_TERMINAL 1)" = 1 ] && [ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
+    run python3 "$SRC/lib/hotkeys.py" apply "$duo" || warn "F7 not bound to the terminal: run duo hotkeys apply"
   fi
 
   echo

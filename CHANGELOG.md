@@ -2,6 +2,40 @@
 
 ## Unreleased
 
+### F7 and F8 swapped; the window is quieter and easier to read
+
+- F7 now opens a terminal and F8 toggles dark mode (`F7_TERMINAL`,
+  `F8_DARK_MODE`; the old `F7_DARK_MODE` and `F8_TERMINAL` lines are
+  ignored). `./install.sh` moves the GNOME shortcut and removes the old one;
+  `duo terminal` is the new command F7 runs
+- the window no longer pops up "ok" after every click; only failures do
+- Settings speaks plainly: each setting has a title and a sentence for
+  someone who has not read the code (the conf key is the tooltip), grouped as
+  Screens, Keyboard shortcuts, Brightness and keyboard light, Battery
+- Logs and Doctor have Copy buttons; an About page, a tab like the others,
+  and a link under Overview lead to the repository
+
+### A window for everything, opened with F12
+
+- `duo gui` opens a GNOME window (GTK 4 + libadwaita) with the screen's
+  contents: the machine at a glance, panel sets, Win+P layouts, brightness,
+  dark style and keyboard backlight; every feature with an on/off switch and
+  a restart button; every knob; the journal; the doctor. It acts only through
+  duo-cli, like the screen
+- F12, the MyASUS key, opens it and closes it again when it has focus
+  (`F12_GUI`). `watch-fn` expects the vendor code `5a 86`, the one mainline
+  hid-asus names the MyASUS key; it is not yet captured on this unit
+- the installer installs the window's dependencies and a launcher, so it is
+  in the app grid as "Zenbook Duo"
+- the installer now restarts a running `duo-*` daemon that started before the
+  code it runs was installed. An update used to leave the daemons on the old
+  code until the next login, which looked like the update had not happened
+- switching `F7_DARK_MODE` in the screen or the window now moves GNOME's
+  shortcut too (`duo hotkeys apply` / `remove`); before, the knob was only
+  read by the installer
+- the Nix package's typelib path pointed at glib's `bin` output, which has no
+  typelibs; it now uses each library's `lib`/`out` output
+
 ### The bottom panel's brightness is matched through GNOME after undocking
 
 - undocking copied the top panel's backlight to the bottom one through

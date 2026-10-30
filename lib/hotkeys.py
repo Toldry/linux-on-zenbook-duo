@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""F7 toggles dark mode instead of opening GNOME's display switcher.
+"""F7 opens a terminal instead of GNOME's display switcher.
 
 Bare F7 does not send a key of its own: after kb-init the keyboard types a
 literal Super+P on its ordinary keyboard interface (measured 2026-10-30 with
 `duo watch-input`: KEY_LEFTMETA + KEY_P, scancodes 0x700e3 + 0x70013). Mutter
 binds Super+P to `switch-monitor`, which is the switcher F7 used to raise.
 So the key can only be rebound where GNOME reads it: Super+P comes out of
-`switch-monitor` and goes to a custom shortcut running `duo theme toggle`.
+`switch-monitor` and goes to a custom shortcut running `duo terminal`.
 A Super+P typed by hand does the same — GNOME cannot tell the two apart —
 and `duo layout cycle` still steps the display layouts.
 
@@ -15,7 +15,7 @@ Other entries in `switch-monitor` (XF86Display) and the user's own custom
 shortcuts are kept.
 
 Usage:
-  hotkeys.py apply DUO_CLI   bind F7 (Super+P) to `DUO_CLI theme toggle`
+  hotkeys.py apply DUO_CLI   bind F7 (Super+P) to `DUO_CLI terminal`
   hotkeys.py remove          give Super+P back to the display switcher
   hotkeys.py show            print what is bound now
 Exit: 0 done · 1 gsettings failed · 64 usage.
@@ -29,9 +29,16 @@ F7_ACCEL = "<Super>p"
 MUTTER = "org.gnome.mutter.keybindings"
 MEDIA = "org.gnome.settings-daemon.plugins.media-keys"
 CUSTOM_DIR = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/"
-THEME_PATH = CUSTOM_DIR + "zenduo-theme-toggle/"
-CUSTOM = f"{MEDIA}.custom-keybinding:{THEME_PATH}"
-NAME = "Toggle dark mode (zenduo, F7)"
+F7_PATH = CUSTOM_DIR + "zenduo-f7/"
+CUSTOM = f"{MEDIA}.custom-keybinding:{F7_PATH}"
+NAME = "Open a terminal (zenduo, F7)"
+# Until 2026-10-30 F7 toggled dark mode under this path; apply and remove
+# take it out, so an update does not leave two shortcuts on Super+P.
+OLD_PATHS = (CUSTOM_DIR + "zenduo-theme-toggle/",)
+
+
+def custom(path):
+    return f"{MEDIA}.custom-keybinding:{path}"
 
 
 class HotkeyError(Exception):
@@ -92,7 +99,7 @@ def is_f7(accel):
 
 
 def apply(store, duo_cli):
-    """Bind F7 to the theme toggle; True when anything had to change."""
+    """Bind F7 to the terminal; True when anything had to change."""
     changed = False
     switch = store.get(MUTTER, "switch-monitor")
     kept = [a for a in switch if not is_f7(a)]
@@ -100,10 +107,17 @@ def apply(store, duo_cli):
         store.set(MUTTER, "switch-monitor", kept)
         changed = True
     paths = store.get(MEDIA, "custom-keybindings")
-    if THEME_PATH not in paths:
-        store.set(MEDIA, "custom-keybindings", paths + [THEME_PATH])
+    kept = [p for p in paths if p not in OLD_PATHS]
+    if F7_PATH not in kept:
+        kept.append(F7_PATH)
+    if kept != paths:
+        store.set(MEDIA, "custom-keybindings", kept)
         changed = True
-    want = {"name": NAME, "command": f"{duo_cli} theme toggle", "binding": F7_ACCEL}
+    for old in OLD_PATHS:
+        if old in paths:
+            for key in ("name", "command", "binding"):
+                store.reset(custom(old), key)
+    want = {"name": NAME, "command": f"{duo_cli} terminal", "binding": F7_ACCEL}
     for key, value in want.items():
         if store.get(CUSTOM, key) != value:
             store.set(CUSTOM, key, value)
@@ -117,14 +131,16 @@ def remove(store):
     if not any(is_f7(a) for a in switch):
         store.set(MUTTER, "switch-monitor", [F7_ACCEL] + switch)
     paths = store.get(MEDIA, "custom-keybindings")
-    if THEME_PATH in paths:
-        store.set(MEDIA, "custom-keybindings", [p for p in paths if p != THEME_PATH])
-    for key in ("name", "command", "binding"):
-        store.reset(CUSTOM, key)
+    ours = (F7_PATH,) + OLD_PATHS
+    if any(p in paths for p in ours):
+        store.set(MEDIA, "custom-keybindings", [p for p in paths if p not in ours])
+    for path in ours:
+        for key in ("name", "command", "binding"):
+            store.reset(custom(path), key)
 
 
 def show(store):
-    bound = THEME_PATH in store.get(MEDIA, "custom-keybindings")
+    bound = F7_PATH in store.get(MEDIA, "custom-keybindings")
     command = store.get(CUSTOM, "command") if bound else ""
     switch = store.get(MUTTER, "switch-monitor")
     if bound and not any(is_f7(a) for a in switch):
@@ -143,7 +159,7 @@ def main(argv, store=None):
     try:
         if argv[0] == "apply":
             changed = apply(store, argv[1])
-            print("hotkeys: F7 toggles dark mode" + ("" if changed else " (up to date)"))
+            print("hotkeys: F7 opens a terminal" + ("" if changed else " (up to date)"))
         elif argv[0] == "remove":
             remove(store)
             print("hotkeys: F7 opens the display switcher again")

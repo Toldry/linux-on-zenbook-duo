@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Zenbook Duo
+GenericName=Dual-screen laptop settings
+Comment=Screens, keyboard, features, settings and logs of linux-on-zenbook-duo
+Exec=/usr/local/bin/duo-cli gui
+Icon=preferences-desktop-display
+Terminal=false
+Categories=Settings;HardwareSettings;GTK;
+Keywords=duo;zenduo;zenbook;screen;panel;keyboard;backlight;battery;
+StartupNotify=true

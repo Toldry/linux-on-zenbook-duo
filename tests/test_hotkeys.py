@@ -1,4 +1,4 @@
-"""hotkeys: what binding F7 to the theme toggle writes into GNOME's settings,
+"""hotkeys: what binding F7 to the terminal writes into GNOME's settings,
 and what undoing it puts back. The store is a dict; nothing runs gsettings."""
 
 import os
@@ -30,12 +30,12 @@ class FakeStore:
 
 
 class Hotkeys(unittest.TestCase):
-    def test_apply_moves_super_p_from_the_switcher_to_the_toggle(self):
+    def test_apply_moves_super_p_from_the_switcher_to_the_terminal(self):
         store = FakeStore(paths=[MINE])
         self.assertTrue(hk.apply(store, DUO))
         self.assertEqual(store.get(hk.MUTTER, "switch-monitor"), ["XF86Display"])
-        self.assertEqual(store.get(hk.MEDIA, "custom-keybindings"), [MINE, hk.THEME_PATH])
-        self.assertEqual(store.get(hk.CUSTOM, "command"), f"{DUO} theme toggle")
+        self.assertEqual(store.get(hk.MEDIA, "custom-keybindings"), [MINE, hk.F7_PATH])
+        self.assertEqual(store.get(hk.CUSTOM, "command"), f"{DUO} terminal")
         self.assertEqual(store.get(hk.CUSTOM, "binding"), "<Super>p")
         self.assertIn(DUO, hk.show(store))
 
@@ -58,6 +58,22 @@ class Hotkeys(unittest.TestCase):
         self.assertEqual(store.get(hk.MUTTER, "switch-monitor"), ["<Super>p", "XF86Display"])
         self.assertEqual(store.get(hk.MEDIA, "custom-keybindings"), [MINE])
         self.assertEqual(hk.show(store), "F7 (Super+P): GNOME's display switcher")
+
+    def test_apply_replaces_the_old_dark_mode_shortcut(self):
+        # Until 2026-10-30 F7 toggled dark mode under another path.
+        old = hk.OLD_PATHS[0]
+        store = FakeStore(switch=["XF86Display"], paths=[MINE, old])
+        store.values[(hk.custom(old), "binding")] = "<Super>p"
+        self.assertTrue(hk.apply(store, DUO))
+        self.assertEqual(store.get(hk.MEDIA, "custom-keybindings"), [MINE, hk.F7_PATH])
+        self.assertNotIn((hk.custom(old), "binding"), store.values)
+
+    def test_remove_also_takes_the_old_shortcut_out(self):
+        old = hk.OLD_PATHS[0]
+        store = FakeStore(switch=["XF86Display"], paths=[old, MINE])
+        hk.remove(store)
+        self.assertEqual(store.get(hk.MEDIA, "custom-keybindings"), [MINE])
+        self.assertEqual(store.get(hk.MUTTER, "switch-monitor"), ["<Super>p", "XF86Display"])
 
     def test_gvariant_round_trip(self):
         self.assertEqual(hk.to_gvariant([]), "@as []")

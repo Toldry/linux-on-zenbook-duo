@@ -107,8 +107,9 @@ KNOBS = [
     Knob("REMEMBER_LAYOUT", "bool", "remember the layout per set of connected monitors, the way Windows does", daemon="watch-displays"),
     Knob("LOGIN_SCREEN_LAYOUT", "bool", "give the GDM login screen the same layouts (needs the root helper)", daemon="watch-displays"),
     Knob("TOUCH_MAPPING", "bool", "pin each panel's touch and pen to that panel; GNOME alone puts both on the top one", daemon="watch-displays"),
-    Knob("F7_DARK_MODE", "bool", "F7 toggles dark mode instead of GNOME's display switcher; applied by duo hotkeys apply"),
-    Knob("F8_TERMINAL", "bool", "F8 opens a terminal", daemon="watch-fn"),
+    Knob("F7_TERMINAL", "bool", "F7 opens a terminal instead of GNOME's display switcher; applied by duo hotkeys apply"),
+    Knob("F8_DARK_MODE", "bool", "F8 toggles dark mode", daemon="watch-fn"),
+    Knob("F12_GUI", "bool", "F12 (the MyASUS key) opens and closes the duo window", daemon="watch-fn"),
 ]
 
 KNOB_BY_KEY = {k.key: k for k in KNOBS}
@@ -848,6 +849,11 @@ class Model:
         if err:
             return Result(False, f"config set {key}", err)
         r = cli("config", "set", key, value) if value != "" else self._config_clear(key)
+        if r.ok and key == "F7_TERMINAL":
+            # The knob is read once, by the installer; the shortcut itself
+            # lives in GNOME's settings, so a change here has to move it too.
+            h = cli("hotkeys", "apply" if value == "1" else "remove")
+            r = Result(h.ok, r.title, "\n".join(x for x in (r.output, h.output) if x))
         self.config_path, self.config, self.config_hm, self.config_error = read_config()
         self.bump()
         return r
@@ -925,6 +931,16 @@ class Model:
 
     def login_layout(self):
         return cli("layout", "login")
+
+    def brightness(self, verb):
+        """`duo-cli brightness up|down|match`."""
+        r = cli("brightness", verb)
+        self.refresh_fast()
+        return r
+
+    def theme(self, verb="show"):
+        """`duo-cli theme show|dark|light|toggle`; show prints light or dark."""
+        return cli("theme", verb, timeout=10)
 
 
 def validate(knob, value):

@@ -28,6 +28,12 @@ home-manager module generates the same units declaratively and marks them
   something the command line cannot, that is a bug. Stdlib curses, no other
   dependency, and every view renders to text (`duo --snapshot`) so it is
   tested without a terminal.
+- **The window** (`lib/duo_gui.py`, `duo gui`, F12) is the screen's twin in
+  GTK 4 and libadwaita, on the same Model, under the same rule: it reads
+  through duo_model and acts through duo-cli. What to show is decided in
+  plain functions above `make_app()`, tested without a display; the GTK
+  classes only lay those answers out. One instance per session, so F12 can
+  close the window it opened.
 
 ## Rules
 
