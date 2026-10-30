@@ -105,6 +105,8 @@ KNOBS = [
     Knob("REMEMBER_LAYOUT", "bool", "remember the layout per set of connected monitors, the way Windows does", daemon="watch-displays"),
     Knob("LOGIN_SCREEN_LAYOUT", "bool", "give the GDM login screen the same layouts (needs the root helper)", daemon="watch-displays"),
     Knob("TOUCH_MAPPING", "bool", "pin each panel's touch and pen to that panel; GNOME alone puts both on the top one", daemon="watch-displays"),
+    Knob("F7_DARK_MODE", "bool", "F7 toggles dark mode instead of GNOME's display switcher; applied by duo hotkeys apply"),
+    Knob("F8_TERMINAL", "bool", "F8 opens a terminal", daemon="watch-fn"),
 ]
 
 KNOB_BY_KEY = {k.key: k for k in KNOBS}

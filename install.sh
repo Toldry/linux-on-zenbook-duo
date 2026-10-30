@@ -339,6 +339,9 @@ user_phase() {
     # GNOME's own disable-while-typing switch (the quirk gives it something to act on).
     dconf write /org/gnome/desktop/peripherals/touchpad/disable-while-typing true 2>/dev/null || true
   fi
+  if [ "$(conf_get F7_DARK_MODE 1)" = 1 ] && [ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
+    run python3 "$SRC/lib/hotkeys.py" apply "$duo" || warn "F7 not bound to dark mode: run duo hotkeys apply"
+  fi
 
   echo
   "$duo" status || true
