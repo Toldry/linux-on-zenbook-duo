@@ -19,6 +19,8 @@ This daemon closes the loop:
       kbd-backlight  -> `duo kb-backlight` cycle 0..3
       mic-mute       -> `wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle`
       emoji          -> `ibus emoji` (the picker GNOME's Ctrl+; opens)
+      split-screen   -> a terminal (bare F8)
+      myasus         -> `duo gui --toggle`, the duo window (bare F12)
   - honors ~/.config/zenduo/fn-map.json (from `duo fn-map`) as overrides, so
     newly-captured codes map onto actions without touching this file
 
@@ -65,12 +67,17 @@ DEFAULT_ACTIONS = {
     # `5a 9c` then `5a 00` each, and nothing else. Bare F7 sends no vendor
     # report at all, only a typed Super+P (see lib/hotkeys.py).
     0x9C: "split-screen",
+    # Bare F12 carries the MyASUS legend. 0x86 is the code mainline hid-asus
+    # maps to KEY_PROG1 with the comment "MyASUS key" (drivers/hid/hid-asus.c,
+    # asus_input_mapping, read 2026-10-30). VERIFY-ON-HW that this keyboard
+    # sends it: `duo fn-probe`, or `duo log` names any code with no action.
+    0x86: "myasus",
 }
 
 # Actions from a fn-map.json we know how to perform (everything else logged).
 # The actions dispatch() acts on (fn-lock only on purpose: see the docstring).
 HANDLED = {"brightness-down", "brightness-up", "kbd-backlight", "second-screen",
-           "mic-mute", "emoji", "fn-lock", "split-screen"}
+           "mic-mute", "emoji", "fn-lock", "split-screen", "myasus"}
 
 # F8 (split-screen) opens a terminal. xdg-terminal-exec is the freedesktop
 # launcher that honours the user's chosen terminal; the rest are GNOME's own,
@@ -284,6 +291,14 @@ class Dispatcher:
                 # terminal F8 ever opened.
                 self.spawn(["systemd-run", "--user", "--collect", "--quiet",
                             "--", *argv])
+        elif action == "myasus":
+            if os.environ.get("ZENDUO_F12_GUI", "1") != "1":
+                return  # F12_GUI=0 in zenduo.conf
+            # Its own unit, like the terminal: the window must outlive a
+            # restart of this daemon. A second press reaches the open window
+            # over D-Bus (duo gui is single-instance) and closes it.
+            self.spawn(["systemd-run", "--user", "--collect", "--quiet",
+                        "--", DUO, "gui", "--toggle"])
         elif action == "fn-lock":
             pass  # see the module docstring: the swap is not ours to perform yet
 

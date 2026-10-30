@@ -45,6 +45,14 @@ user_half() {
     rm -f "$f"; log "removed $f"
   done
   systemctl --user daemon-reload 2>/dev/null || true
+  local launcher="${XDG_DATA_HOME:-$HOME/.local/share}/applications/io.github.zenduo.Duo.desktop"
+  if [ -e "$launcher" ]; then
+    if nix_managed "$launcher"; then
+      warn "$(basename "$launcher") is managed by home-manager — remove it there"
+    else
+      rm -f "$launcher"; log "removed $launcher"
+    fi
+  fi
   # Super+P back to GNOME's display switcher, only if F7 was ours.
   case "$(python3 lib/hotkeys.py show 2>/dev/null)" in
     *"theme toggle"*) python3 lib/hotkeys.py remove || true ;;
