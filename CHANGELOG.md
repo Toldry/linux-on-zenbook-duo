@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### The keyboard light goes dark when you stop typing on Bluetooth
+
+- detached, the keyboard's light stayed on until you turned it off, and the
+  keyboard needed charging several times a day. `watch-fn` now turns it off
+  after 30 s without a key press and brings your level back on the next key,
+  as Windows does (`KB_BACKLIGHT_IDLE_OFF`; 0 = never). Docked, it stays lit
+- Settings → Brightness and keyboard light → "Keyboard light off when idle"
+  picks the delay from a list
+- `duo kb-backlight --apply N` sets a level without remembering it
+
 ### F7 and F8 swapped; the window is quieter and easier to read
 
 - F7 now opens a terminal and F8 toggles dark mode (`F7_TERMINAL`,

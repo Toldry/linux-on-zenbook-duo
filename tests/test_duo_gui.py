@@ -71,6 +71,16 @@ class Knobs(unittest.TestCase):
         self.assertEqual(kinds["APPLY_METHOD"], "choice")
         self.assertEqual(kinds["BACKLIGHT_SOURCE"], "choice")
         self.assertEqual(kinds["BATTERY_LIMIT"], "entry")
+        self.assertEqual(kinds["KB_BACKLIGHT_IDLE_OFF"], "choice")
+
+    def test_idle_off_is_picked_from_plain_durations(self):
+        knob = dm.KNOB_BY_KEY["KB_BACKLIGHT_IDLE_OFF"]
+        choices = dg.knob_choices(knob, ["intel_backlight"])
+        self.assertIn("30", choices)  # the default must be on offer
+        self.assertTrue(all(dm.validate(knob, c) == "" for c in choices))
+        self.assertEqual([dg.choice_label(c, knob) for c in ("0", "30", "60", "300", "45")],
+                         ["Never", "After 30 seconds", "After 1 minute", "After 5 minutes",
+                          "After 45 seconds"])
 
     def test_a_backlight_is_typed_when_the_kernel_lists_none(self):
         knob = dm.KNOB_BY_KEY["BACKLIGHT_SOURCE"]
