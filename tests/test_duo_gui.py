@@ -146,6 +146,10 @@ class Toggle(unittest.TestCase):
             with self.assertRaises(ValueError):
                 dg.parse_args(bad)
 
+    def test_about_is_a_page_like_the_others(self):
+        self.assertEqual(dg.parse_args(["--page", "about"]), (False, "about"))
+        self.assertTrue(all(url.startswith(dg.REPO_URL) for _t, _s, url in dg.ABOUT_LINKS))
+
     def test_bad_arguments_are_a_usage_error_before_any_gtk(self):
         self.assertEqual(dg.main(["--bogus"]), 64)
 

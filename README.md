@@ -233,8 +233,8 @@ grid, or **F12**. Press F12 again while the window has focus and it closes.
   each with a button that copies what is shown.
 
 Failures pop up with what the command said; a click that worked just shows
-its result on the page. The ⓘ button and the link under Overview lead to this
-repository.
+its result on the page. The **About** page (and the link under Overview) leads
+to this repository.
 
 Like the screen, it changes nothing itself: every button is a `duo-cli` or
 `systemctl --user` command, and its toast says what that command printed. It
