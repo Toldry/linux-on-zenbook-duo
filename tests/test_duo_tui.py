@@ -40,7 +40,7 @@ def stub_model():
     ]
     m.config_path = "/home/duo/.config/zenduo/zenduo.conf"
     m.config = {"APPLY_METHOD": "temporary", "BATTERY_LIMIT": "80", "BACKLIGHT_SOURCE": "intel_backlight",
-                "BACKLIGHT_TARGET": "", "KB_BACKLIGHT_RESTORE": "1", "DOCK_POLICY": "1",
+                "BACKLIGHT_TARGET": "", "KB_BACKLIGHT_RESTORE": "1", "KB_BACKLIGHT_IDLE_OFF": "30", "DOCK_POLICY": "1",
                 "REMEMBER_LAYOUT": "1", "LOGIN_SCREEN_LAYOUT": "1"}
     now = time.time()
     m.entries.extend([
@@ -378,7 +378,7 @@ class KeysTest(unittest.TestCase):
         calls = []
         app.model.config_set = lambda k, v: (calls.append((k, v)), dm.Result(True, f"config set {k}", f"{k}={v}"))[1]
         app.current = "Settings"
-        app.views["Settings"].cur.i = 5      # DOCK_POLICY
+        app.views["Settings"].cur.i = 6      # DOCK_POLICY
         app.handle_key(ord(" "))
         self.assertEqual(calls, [("DOCK_POLICY", "0")])
         # the daemon that reads it is running, so a restart is offered

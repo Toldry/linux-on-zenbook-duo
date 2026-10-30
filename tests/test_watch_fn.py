@@ -254,3 +254,68 @@ class AbsentKeyboard(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BacklightIdleOff(unittest.TestCase):
+    """2026-10-30: detached and idle, the backlight stayed lit and the keyboard
+    needed charging several times a day; under Windows it lasted days."""
+
+    def connected(self, timeout=30, bluetooth=True):
+        idle = watch_fn.IdleOff(timeout)
+        idle.connected(100.0, bluetooth)
+        return idle
+
+    def test_goes_dark_once_after_the_timeout(self):
+        idle = self.connected()
+        self.assertFalse(idle.due(129.0, lambda: 2))
+        self.assertTrue(idle.due(130.0, lambda: 2))
+        self.assertFalse(idle.due(200.0, lambda: 2))  # already dark
+
+    def test_the_next_key_wakes_it_and_restarts_the_clock(self):
+        idle = self.connected()
+        idle.due(130.0, lambda: 2)
+        self.assertTrue(idle.key(140.0))
+        self.assertFalse(idle.key(141.0))  # lit again: an ordinary key
+        self.assertFalse(idle.due(170.0, lambda: 2))
+        self.assertTrue(idle.due(171.0, lambda: 2))
+
+    def test_typing_keeps_it_lit(self):
+        idle = self.connected()
+        for t in range(101, 200, 10):
+            self.assertFalse(idle.key(float(t)))
+            self.assertFalse(idle.due(t + 5.0, lambda: 2))
+
+    def test_never_acts_docked_disabled_or_already_off(self):
+        self.assertFalse(self.connected(bluetooth=False).due(1000.0, lambda: 2))
+        self.assertFalse(self.connected(timeout=0).due(1000.0, lambda: 2))
+        level_read = []
+        idle = self.connected()
+        self.assertFalse(idle.due(1000.0, lambda: level_read.append(1) or 0))
+        self.assertEqual(level_read, [1])
+        self.assertFalse(idle.key(1001.0))  # nothing was darkened, nothing to wake
+
+    def test_level_is_only_read_once_the_timeout_passed(self):
+        idle = self.connected()
+        idle.due(110.0, lambda: self.fail("read the level before the timeout"))
+
+    def test_status_reports_are_not_typing(self):
+        actions = dict(watch_fn.DEFAULT_ACTIONS)
+        self.assertFalse(watch_fn.counts_as_typing(bytes([0x5A, 0x3D, 0, 0]), actions))
+        self.assertTrue(watch_fn.counts_as_typing(bytes([0x5A, 0xC7, 0, 0]), actions))
+        self.assertTrue(watch_fn.counts_as_typing(bytes([0x01, 0, 0, 0x04]), actions))
+        self.assertFalse(watch_fn.counts_as_typing(b"", actions))
+
+    def test_timeout_from_the_environment(self):
+        from unittest import mock
+        for value, expected in (("45", 45), ("0", 0), ("-3", 0), ("soon", 30)):
+            with mock.patch.dict(os.environ, {"ZENDUO_KB_BACKLIGHT_IDLE_OFF": value}):
+                self.assertEqual(watch_fn.idle_off_seconds(), expected)
+
+    def test_dark_and_wake_never_touch_the_remembered_level(self):
+        from unittest import mock
+        d = Recorder()
+        with mock.patch.object(watch_fn.kb_backlight, "read_level", return_value=2):
+            d.darken_backlight()
+            d.wake_backlight()
+        self.assertEqual(d.spawned, [[watch_fn.DUO, "kb-backlight", "--apply", "0"],
+                                     [watch_fn.DUO, "kb-backlight", "--apply", "2"]])

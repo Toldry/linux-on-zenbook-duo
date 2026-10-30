@@ -27,6 +27,7 @@ let
     "ZENDUO_APPLY_METHOD=${cfg.applyMethod}"
     "ZENDUO_DOCK_POLICY=${bool01 cfg.dockPolicy}"
     "ZENDUO_KB_BACKLIGHT_RESTORE=${bool01 cfg.kbBacklightRestore}"
+    "ZENDUO_KB_BACKLIGHT_IDLE_OFF=${toString cfg.kbBacklightIdleOff}"
     "ZENDUO_REMEMBER_LAYOUT=${bool01 cfg.rememberLayout}"
     "ZENDUO_LOGIN_SCREEN_LAYOUT=${bool01 cfg.loginScreenLayout}"
     "ZENDUO_TOUCH_MAPPING=${bool01 cfg.touchMapping}"
@@ -58,6 +59,7 @@ let
     BACKLIGHT_SOURCE=${cfg.backlightSource}
     BACKLIGHT_TARGET=${cfg.backlightTarget}
     KB_BACKLIGHT_RESTORE=${bool01 cfg.kbBacklightRestore}
+    KB_BACKLIGHT_IDLE_OFF=${toString cfg.kbBacklightIdleOff}
     DOCK_POLICY=${bool01 cfg.dockPolicy}
     REMEMBER_LAYOUT=${bool01 cfg.rememberLayout}
     LOGIN_SCREEN_LAYOUT=${bool01 cfg.loginScreenLayout}
@@ -214,6 +216,12 @@ in
       type = lib.types.bool;
       default = true;
       description = "Put the keyboard backlight back to its remembered level after the keyboard re-enumerates (dock, undock, resume all blank it in hardware).";
+    };
+
+    kbBacklightIdleOff = lib.mkOption {
+      type = lib.types.ints.between 0 3600;
+      default = 30;
+      description = "Seconds without a key press before the keyboard backlight goes dark while the keyboard is on Bluetooth; the next key brings it back. 0 = never.";
     };
 
     watchBacklight = lib.mkOption {

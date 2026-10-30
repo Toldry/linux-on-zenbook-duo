@@ -111,6 +111,7 @@ Knobs live in `~/.config/zenduo/zenduo.conf` ([annotated example](config/zenduo.
 | `BATTERY_LIMIT` | empty | Charge-limit percentage (20–100) the `bat-limit` feature applies at login |
 | `BACKLIGHT_SOURCE` / `BACKLIGHT_TARGET` | `intel_backlight` / auto | Which backlight brightness is copied from and to |
 | `KB_BACKLIGHT_RESTORE` | `1` | Restore the keyboard backlight level after the keyboard re-enumerates |
+| `KB_BACKLIGHT_IDLE_OFF` | `30` | Seconds without a key press before the backlight goes dark while the keyboard is on Bluetooth (the next key brings it back); `0` = never |
 | `DOCK_POLICY` | `1` | `0` keeps `watch-displays` running but makes it watch without acting |
 | `REMEMBER_LAYOUT` | `1` | Remember the display layout per set of connected monitors and let GNOME restore it (see below) |
 | `LOGIN_SCREEN_LAYOUT` | `1` | Give the GDM greeter the same layouts, so the password prompt is on the monitor you were using |

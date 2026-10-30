@@ -32,6 +32,12 @@ BACKLIGHT_TARGET=
 # re-enumerates (dock, undock, resume all blank it in hardware). 1 = yes.
 KB_BACKLIGHT_RESTORE=1
 
+# Seconds without a key press before the keyboard backlight goes dark while
+# the keyboard is on Bluetooth; the next key brings the level back. Windows
+# does the same, and a lit keyboard drains its own battery in hours rather
+# than days. 0 = never (docked it is powered by the laptop and stays lit).
+KB_BACKLIGHT_IDLE_OFF=30
+
 # Enforce the dock policy at all (bottom panel off while the keyboard is on it,
 # back on when it comes off). 0 makes duo-watch-displays a no-op while still
 # running, which is handy for a day of experiments without disabling the unit.

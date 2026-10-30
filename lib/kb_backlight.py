@@ -13,7 +13,9 @@ access requires the udev uaccess rule installed by system/45-udev.sh.
 A pyusb path is intentionally NOT implemented — if hidraw fails we want to
 know why, not silently degrade to a driver-detaching transport.
 
-Usage: kb_backlight.py <0|1|2|3>
+Usage: kb_backlight.py [--apply] <0|1|2|3>
+  --apply sets the level without remembering it (watch-fn's idle-off: the
+  backlight goes dark, but the next key press must bring back the user's level).
 Exit codes: 0 ok · 1 no device/all writes failed · 13 permission denied · 64 usage.
 """
 
@@ -85,7 +87,7 @@ def keyboard_hidraw_nodes():
             yield "/dev/" + uevent.split("/")[4]
 
 
-def set_level(level):
+def set_level(level, remember=True):
     payload = [0x5A, 0xBA, 0xC5, 0xC4, level]
     # Address the interface that owns the ASUS vendor collection. Sending to
     # "whichever node accepts first" is what made this work docked one minute
@@ -120,7 +122,8 @@ def set_level(level):
                     fcntl.ioctl(fd, hidiocsfeature(len(report)), bytes(report))
                 except OSError:
                     continue
-                save_level(level)
+                if remember:
+                    save_level(level)
                 # Over Bluetooth a refused write still returns success here
                 # (kb_init.over_bluetooth), so "sent" is all that is known.
                 how = ", unconfirmed over Bluetooth" if kb_init.over_bluetooth(node) else ""
@@ -148,6 +151,8 @@ def main(argv):
     if len(argv) == 1 and argv[0] == "--show":
         print(read_level())
         return 0
+    if len(argv) == 2 and argv[0] == "--apply" and argv[1] in ("0", "1", "2", "3"):
+        return set_level(int(argv[1]), remember=False)
     if len(argv) != 1 or argv[0] not in ("0", "1", "2", "3"):
         print(__doc__, file=sys.stderr)
         return 64
