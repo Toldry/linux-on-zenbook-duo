@@ -42,7 +42,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: bytecompile
-        run: python3 -m py_compile bin/duo lib/*.py tests/*.py
+        run: python3 -m py_compile bin/duo lib/*.py tests/*.py windows/*.py
       - name: unit tests (without PyGObject — the layout maths must not need it)
         run: python3 -m unittest discover -s tests -v
       - name: the screen renders without a terminal

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### A kit for watching the ASUS software on Windows
+
+- `windows/` holds Python scripts to run on the Windows partition: they log
+  the BIOS calls and keyboard reports MyASUS makes, the USB traffic, the WMI
+  calls and the speaker response, cut by what you did, and `analyze.py` turns
+  that into Linux equivalents. Read only, apart from one guarded test command.
+  docs/WINDOWS-RE.md is the guide and lists what is still guesswork. Not yet
+  run on Windows
+
 ### The keyboard light goes dark when you stop typing on Bluetooth
 
 - detached, the keyboard's light stayed on until you turned it off, and the
