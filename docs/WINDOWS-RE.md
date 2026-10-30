@@ -226,6 +226,12 @@ then only tells you which MyASUS name maps to which value. **Watch the
 order**: asus-wmi maps the Vivobook/Zenbook thermal ids in a different order
 from the ROG ones (read in drivers/platform/x86/asus-wmi.c).
 
+"Memory Allocated to GPU" (Power & Performance) is not in the `power`
+scenario, because it only takes effect after a restart. To capture it, run
+`atk_query.py --json before.json`, change the setting, restart, then run
+`atk_query.py --json after.json` and diff the two. **GUESS, about 60 %**:
+it is the `APU_MEM` id, `0x000600c1`, which asus-wmi already knows.
+
 To find ids that nobody has named:
 
 ```powershell
