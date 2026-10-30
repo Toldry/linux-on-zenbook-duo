@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 r"""Look at the ASUS HID devices from Windows, the way Windows sees them.
 
     py hid_probe.py list               every ASUS (0b05) HID collection: usage

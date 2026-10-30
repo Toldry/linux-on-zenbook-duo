@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 r"""Write down every piece of ASUS software and hardware Windows knows about.
 
     py inventory.py                  -> windows/captures/<stamp>-inventory/

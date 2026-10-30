@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 r"""Measure what the speakers play, on Windows and on Linux, the same way.
 
     py -m pip install numpy sounddevice

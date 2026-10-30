@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 r"""Log what the ASUS software asks the hardware to do, from inside it.
 
     py -m pip install frida
@@ -210,8 +209,13 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         import frida
-    except ImportError:
-        sys.exit("hook_asus: needs Frida. Run: py -m pip install frida")
+    except ImportError as error:
+        # Installed but unloadable is the common case, not missing: the name
+        # alone would send people to reinstall a package pip says is there.
+        sys.exit(f"hook_asus: cannot import Frida ({error}).\n"
+                 "Not installed: py -m pip install frida\n"
+                 "'DLL load failed': install the Microsoft Visual C++ Redistributable"
+                 " (x64), https://aka.ms/vs/17/release/vc_redist.x64.exe")
 
     device = frida.get_local_device()
     own_pid = os.getpid()

@@ -72,7 +72,10 @@ mostly to find which device id and which value, or which bytes.
 2. Get this repository on the Windows side, either with a git clone or a ZIP
    from GitHub. All commands below run from its `windows\` folder in an
    **Administrator** PowerShell. The ASUS services run as SYSTEM, and the
-   capture drivers need admin rights.
+   capture drivers need admin rights. Run every script with `py`, the
+   interpreter `pip` installed into. The scripts carry no `#!` line on
+   purpose: `py` follows one, and `#!/usr/bin/env python3` sent it to a
+   different Python on PATH, one without Frida (seen 2026-10-30).
 3. Install the extras that only some tools need:
 
 ```powershell

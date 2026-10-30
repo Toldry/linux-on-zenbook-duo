@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 r"""Find where MyASUS stores a setting: snapshot, change it, snapshot, diff.
 
     py snapshot.py take before

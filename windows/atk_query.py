@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 r"""Ask the BIOS, through ASUS's own driver, which ATK devices exist and their state.
 
     py atk_query.py                 every device id zenduo_re knows

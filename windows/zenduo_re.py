@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 r"""Shared pieces of the Windows reverse-engineering kit (docs/WINDOWS-RE.md).
 
 Everything here is plain stdlib and runs on Linux too, which is the point: the

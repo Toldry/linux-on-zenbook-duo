@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 r"""Turn capture sessions into one timeline per action, with Linux equivalents.
 
     python3 analyze.py windows/captures/20261030-120000-hooks [more sessions...]

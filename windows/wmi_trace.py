@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 r"""Record which WMI methods the ASUS software calls, cut by action.
 
     py wmi_trace.py --scenario power

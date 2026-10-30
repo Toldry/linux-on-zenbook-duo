@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 r"""Record the USB traffic to the docked keyboard, cut by action.
 
     py usb_capture.py --list-interfaces
