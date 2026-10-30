@@ -57,6 +57,7 @@ What the machine does under Windows, whether it does it here, and how.
 | Battery charge limit (MyASUS) | `duo bat-limit`, re-applied at login | ✅ |
 | Performance / balanced / quiet profiles | `platform_profile` exists; no `duo` verb yet | 📝 phase T |
 | Standby drain comparable to Windows | s2idle; unmeasured | 📝 phase T |
+| Keyboard backlight goes dark when idle on Bluetooth, so the keyboard battery lasts days | `watch-fn` idle-off (`KB_BACKLIGHT_IDLE_OFF`, 30 s) | 🧪 VERIFY-ON-HW |
 | Hibernate | — | ✖ |
 
 ## Everything else

@@ -33,6 +33,7 @@ PYGI="${DUO_PYGI:-/usr/bin/python3}"
 export ZENDUO_APPLY_METHOD="${ZENDUO_APPLY_METHOD:-$(conf_get APPLY_METHOD)}"
 export ZENDUO_DOCK_POLICY="${ZENDUO_DOCK_POLICY:-$(conf_get DOCK_POLICY)}"
 export ZENDUO_KB_BACKLIGHT_RESTORE="${ZENDUO_KB_BACKLIGHT_RESTORE:-$(conf_get KB_BACKLIGHT_RESTORE)}"
+export ZENDUO_KB_BACKLIGHT_IDLE_OFF="${ZENDUO_KB_BACKLIGHT_IDLE_OFF:-$(conf_get KB_BACKLIGHT_IDLE_OFF)}"
 export ZENDUO_REMEMBER_LAYOUT="${ZENDUO_REMEMBER_LAYOUT:-$(conf_get REMEMBER_LAYOUT)}"
 export ZENDUO_LOGIN_SCREEN_LAYOUT="${ZENDUO_LOGIN_SCREEN_LAYOUT:-$(conf_get LOGIN_SCREEN_LAYOUT)}"
 export ZENDUO_TOUCH_MAPPING="${ZENDUO_TOUCH_MAPPING:-$(conf_get TOUCH_MAPPING)}"
@@ -109,6 +110,7 @@ usage: duo-cli <command>        (duo <command> runs the same thing)
   kb-backlight <0-3>     keyboard backlight (native LED if present, else HID);
                          the level is remembered and restored on dock/undock/resume
   kb-backlight --show    print the remembered level
+  kb-backlight --apply <0-3>  set it without remembering (watch-fn's idle-off)
   bat-limit [20-100]     battery charge-limit threshold (no value = BATTERY_LIMIT
                          from the config file)
   speaker-dsp <install|status|uninstall|seed|preset>
@@ -698,6 +700,13 @@ cmd_kb_backlight() {
     python3 "$LIB/kb_backlight.py" --show
     return $?
   fi
+  # --apply sets a level without remembering it: watch-fn's idle-off darkens
+  # the keyboard, and the next key press must bring back the chosen level.
+  local remember=1
+  if [ "$level" = "--apply" ]; then
+    remember=0
+    level="${2:-}"
+  fi
   case "$level" in 0|1|2|3) ;; *) usage ;; esac
   if [ -d "$NATIVE_LED" ]; then
     local max
@@ -710,13 +719,19 @@ cmd_kb_backlight() {
       # Remember it on this side too: the cycle and the post-dock restore read
       # that file, and they must not diverge just because the kernel gained a
       # native LED and this branch started winning.
-      python3 "$LIB/kb_backlight.py" --record "$level" >/dev/null 2>&1 || true
+      if [ "$remember" = 1 ]; then
+        python3 "$LIB/kb_backlight.py" --record "$level" >/dev/null 2>&1 || true
+      fi
       log "kb-backlight $level via NATIVE LED"
       return 0
     fi
     log "native LED present but not writable — falling back to HID (udev rule missing?)"
   fi
-  python3 "$LIB/kb_backlight.py" "$level"
+  if [ "$remember" = 1 ]; then
+    python3 "$LIB/kb_backlight.py" "$level"
+  else
+    python3 "$LIB/kb_backlight.py" --apply "$level"
+  fi
 }
 
 cmd_hotkeys() {

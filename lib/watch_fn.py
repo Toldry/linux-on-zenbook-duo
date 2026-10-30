@@ -23,6 +23,8 @@ This daemon closes the loop:
       myasus         -> `duo gui --toggle`, the duo window (bare F12)
   - honors ~/.config/zenduo/fn-map.json (from `duo fn-map`) as overrides, so
     newly-captured codes map onto actions without touching this file
+  - on Bluetooth, darkens the keyboard backlight after KB_BACKLIGHT_IDLE_OFF
+    seconds without a key and brings it back on the next one (IdleOff)
 
 Run via the duo-watch-fn systemd user service (installed by ./install.sh, or the home-manager module)
 or by hand: `duo watch-fn`. Needs the udev uaccess rule for hidraw access.
@@ -152,6 +154,13 @@ class Dispatcher:
             log(f"restoring keyboard backlight to level {level}")
         self.spawn([DUO, "kb-backlight", str(level)])
 
+    def darken_backlight(self):
+        # --apply: dark for now, but the remembered level stays the user's.
+        self.spawn([DUO, "kb-backlight", "--apply", "0"])
+
+    def wake_backlight(self):
+        self.spawn([DUO, "kb-backlight", "--apply", str(kb_backlight.read_level())])
+
     def spawn(self, argv):
         try:
             # Capture rather than discard: a key that silently does nothing is
@@ -280,6 +289,69 @@ class Dispatcher:
             pass  # see the module docstring: the swap is not ours to perform yet
 
 
+def idle_off_seconds():
+    """KB_BACKLIGHT_IDLE_OFF from the environment; 0 turns idle-off off."""
+    try:
+        return max(0, int(os.environ.get("ZENDUO_KB_BACKLIGHT_IDLE_OFF", "30")))
+    except ValueError:
+        return 30
+
+
+class IdleOff:
+    """Darken the keyboard backlight while nobody types on a Bluetooth keyboard.
+
+    Nothing else turns it off on Linux: GNOME's idle dimming only reaches
+    backlights the kernel exposes as an LED (UPower's KbdBacklight), and this
+    one is a vendor HID report only watch-fn sends (kb_backlight.py, V8). And
+    restore_backlight() turns it back on after every reconnect and resume. The
+    keyboard then drained its battery several times a day, where it lasted
+    days under Windows (user report, 2026-10-30: the backlight stayed lit with
+    the keyboard detached and idle). ASUS rates it at more than 24 h with the
+    backlight off (https://www.asus.com/support/faq/1051888/). Docked the
+    keyboard runs on the laptop's power, so this only acts on Bluetooth.
+    VERIFY-ON-HW: that the keyboard sends no unprompted report besides the
+    vendor 0x3d (any other one would count as typing and keep it lit).
+    """
+
+    def __init__(self, timeout):
+        self.timeout = timeout
+        self.enabled = False
+        self.dark = False
+        self.last_key = 0.0
+
+    def connected(self, now, bluetooth):
+        """The keyboard was just initialised, and restore_backlight() lit it."""
+        self.enabled = bluetooth and self.timeout > 0
+        self.dark = False
+        self.last_key = now
+
+    def key(self, now):
+        """A key was pressed; True when that should bring the backlight back."""
+        self.last_key = now
+        woke, self.dark = self.dark, False
+        return woke
+
+    def due(self, now, level_of):
+        """True once per idle stretch: the moment to darken the backlight.
+        level_of is only read when the timeout has passed (it reads a file)."""
+        if (not self.enabled or self.dark
+                or now - self.last_key < self.timeout or level_of() == 0):
+            return False
+        self.dark = True
+        return True
+
+
+def counts_as_typing(data, actions):
+    """Whether a report from the keyboard means somebody touched it.
+
+    Unmapped vendor codes do not: 0x3d arrives every 30 s or so on its own
+    (docs/HARDWARE.md, measured 2026-09-27) and would keep the backlight lit.
+    """
+    if len(data) >= 2 and data[0] == VENDOR_REPORT_ID:
+        return data[1] in actions
+    return bool(data)
+
+
 def absent_reason():
     """The line logged when no hidraw node of the keyboard exists.
 
@@ -357,6 +429,7 @@ def main():
     sys.stdout.reconfigure(line_buffering=True)
     actions = load_overrides()
     dispatcher = Dispatcher()
+    idle = IdleOff(idle_off_seconds())
     fds = {}
     # None = "state unknown, say what you find": the first pass and every
     # rescan after a lost node log either branch below, so a keyboard that
@@ -419,6 +492,8 @@ def main():
                     # backlight back rather than leaving it dark until the
                     # user presses the key.
                     dispatcher.restore_backlight()
+                    idle.connected(time.monotonic(),
+                                   any(kb_init.over_bluetooth(n) for n in nodes))
                 else:
                     failures += 1
                     delay = min(60, 2 ** min(failures, 6))
@@ -448,9 +523,17 @@ def main():
                     log(f"lost {node}; rescanning")
                 known = None  # rescan, and report whichever state is found
                 continue
-            if len(data) >= 2 and data[0] == VENDOR_REPORT_ID and data[1] != 0:
+            is_vendor = len(data) >= 2 and data[0] == VENDOR_REPORT_ID
+            if counts_as_typing(data, actions) and idle.key(time.monotonic()):
+                dispatcher.wake_backlight()
+                if is_vendor and actions.get(data[1]) == "kbd-backlight":
+                    continue  # the press that wakes the backlight only wakes it
+            if is_vendor and data[1] != 0:
                 code = data[1]
                 dispatcher.dispatch(code, actions.get(code, f"unmapped-0x{code:02x}"))
+        # After the reads, so a key that arrived during the select counts.
+        if idle.due(time.monotonic(), kb_backlight.read_level):
+            dispatcher.darken_backlight()
 
 
 if __name__ == "__main__":

@@ -85,7 +85,7 @@ class Knob:
     key: str
     kind: str                  # bool | enum | int | backlight | text
     desc: str
-    values: tuple = ()         # enum choices
+    values: tuple = ()         # enum choices; on an int, the ones the GUI offers
     lo: int = 0
     hi: int = 0
     empty_ok: bool = False
@@ -101,6 +101,8 @@ KNOBS = [
     Knob("BACKLIGHT_TARGET", "backlight", "backlight they copy TO; empty = the eDP-2 DRM backlight, auto-detected",
          empty_ok=True, daemon="watch-fn"),
     Knob("KB_BACKLIGHT_RESTORE", "bool", "put the keyboard backlight back after the keyboard re-enumerates", daemon="watch-fn"),
+    Knob("KB_BACKLIGHT_IDLE_OFF", "int", "seconds without a key before the backlight goes dark on Bluetooth; 0 = never",
+         values=("0", "10", "30", "60", "120", "300"), lo=0, hi=3600, daemon="watch-fn"),
     Knob("DOCK_POLICY", "bool", "0 keeps watch-displays running but makes it watch without acting", daemon="watch-displays"),
     Knob("REMEMBER_LAYOUT", "bool", "remember the layout per set of connected monitors, the way Windows does", daemon="watch-displays"),
     Knob("LOGIN_SCREEN_LAYOUT", "bool", "give the GDM login screen the same layouts (needs the root helper)", daemon="watch-displays"),

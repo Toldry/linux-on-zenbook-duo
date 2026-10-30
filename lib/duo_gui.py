@@ -89,6 +89,10 @@ KNOB_TEXT = {
     "KB_BACKLIGHT_RESTORE": ("Brightness and keyboard light", "Restore the keyboard light",
                              "The keyboard forgets its light level when it is docked, undocked "
                              "or the laptop wakes up; this sets it back."),
+    "KB_BACKLIGHT_IDLE_OFF": ("Brightness and keyboard light", "Keyboard light off when idle",
+                              "While the keyboard is off the laptop, its light goes dark after "
+                              "this long without a key press, and the next key brings it back. "
+                              "A lit keyboard empties its own battery in hours instead of days."),
     "BATTERY_LIMIT": ("Battery", "Charge limit in percent", ""),
 }
 
@@ -144,19 +148,32 @@ def knob_kind(knob, backlight_names=()):
         return "switch"
     if knob.kind == "enum" or (knob.kind == "backlight" and backlight_names):
         return "choice"
+    if knob.kind == "int" and knob.values:
+        return "choice"    # a few sensible values beat typing a number
     return "entry"
 
 
 def knob_choices(knob, backlight_names):
     """The values a choice row offers, "" meaning "empty" (auto-detect)."""
-    values = list(knob.values) if knob.kind == "enum" else list(backlight_names)
+    values = list(knob.values) if knob.values else list(backlight_names)
     if knob.empty_ok:
         values.insert(0, "")
     return values
 
 
-def choice_label(value):
+def choice_label(value, knob=None):
+    if knob is not None and knob.key == "KB_BACKLIGHT_IDLE_OFF" and value.isdigit():
+        return seconds_label(int(value))
     return value if value else "(automatic)"
+
+
+def seconds_label(seconds):
+    if seconds == 0:
+        return "Never"
+    if seconds % 60 == 0:
+        minutes = seconds // 60
+        return f"After {minutes} minute" + ("" if minutes == 1 else "s")
+    return f"After {seconds} seconds"
 
 
 def knob_text(knob):
@@ -574,7 +591,7 @@ def make_app(Adw, Gio, GLib, Gtk, Pango):
                 elif kind == "choice":
                     choices = knob_choices(knob, names)
                     row = Adw.ComboRow(title=title, subtitle=subtitle,
-                                       model=Gtk.StringList.new([choice_label(c) for c in choices]))
+                                       model=Gtk.StringList.new([choice_label(c, knob) for c in choices]))
                     row.choices = choices
                     row.connect("notify::selected", self.on_choice_knob, knob.key)
                 else:
@@ -625,6 +642,11 @@ def make_app(Adw, Gio, GLib, Gtk, Pango):
                 if kind == "switch":
                     row.set_active(value == "1")
                 elif kind == "choice":
+                    if value and value not in row.choices and knob.kind == "int":
+                        # Set by hand (`duo config set`) to something the list
+                        # does not offer: show it rather than a wrong choice.
+                        row.choices.append(value)
+                        row.get_model().append(choice_label(value, knob))
                     if value in row.choices:
                         row.set_selected(row.choices.index(value))
                 elif row.get_text() == self.knob_shown.get(knob.key, "") \
