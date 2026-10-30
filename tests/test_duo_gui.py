@@ -1,0 +1,155 @@
+"""lib/duo_gui.py — what the window shows and decides, without GTK or a display.
+
+Everything above make_app() is plain python on purpose: the window only lays
+these answers out, so this is where a change in what it says is caught."""
+
+import configparser
+import os
+import sys
+import unittest
+
+ROOT = os.path.join(os.path.dirname(__file__), "..")
+sys.path.insert(0, os.path.join(ROOT, "lib"))
+import duo_gui as dg  # noqa: E402
+import duo_model as dm  # noqa: E402
+
+
+class Glance(unittest.TestCase):
+    def glance(self, **kw):
+        g = dm.Glance(model="UX8406MA", keyboard="docked",
+                      panels=[("eDP-1", "connected", "enabled"), ("eDP-2", "connected", "disabled")],
+                      backlights=[("intel_backlight", 60), ("card1-eDP-2-backlight", None)],
+                      battery_now="80")
+        for k, v in kw.items():
+            setattr(g, k, v)
+        return dict((key, value) for key, _title, value in dg.glance_rows(g))
+
+    def test_the_rows(self):
+        rows = self.glance()
+        self.assertEqual(rows["top"], "on")
+        self.assertEqual(rows["bottom"], "off")
+        self.assertEqual(rows["battery"], "80 %")
+        self.assertEqual(rows["backlight"], "intel_backlight 60 %, card1-eDP-2-backlight ?")
+        self.assertTrue(rows["keyboard"].startswith("docked"))
+        self.assertNotIn("override", rows)
+
+    def test_a_machine_that_is_not_a_duo(self):
+        rows = self.glance(panels=[("eDP-1", "absent", "absent")], backlights=[], battery_now="")
+        self.assertEqual(rows["top"], "not found")
+        self.assertEqual(rows["bottom"], "?")
+        self.assertEqual(rows["backlight"], "none")
+        self.assertIn("not supported", rows["battery"])
+
+    def test_a_manual_override_is_shown(self):
+        self.assertIn("override", self.glance(override={"set": "both"}))
+
+    def test_a_disconnected_panel_says_so(self):
+        self.assertEqual(dg.panel_text("disconnected", "disabled"), "disconnected")
+
+
+class Features(unittest.TestCase):
+    def unit(self, **kw):
+        f = next(x for x in dm.FEATURES if x.name == "watch-fn")
+        return dm.Unit(f, load="loaded", **kw)
+
+    def test_running_with_restarts(self):
+        u = self.unit(active="active", sub="running", file_state="enabled", restarts=2)
+        self.assertEqual(dg.feature_state(u), ("running, 2 restarts", "ok"))
+
+    def test_failed_with_its_exit_status(self):
+        u = self.unit(active="failed", result="exit-code", exec_status=3, file_state="enabled")
+        self.assertEqual(dg.feature_state(u), ("failed (exit 3)", "err"))
+
+    def test_not_reported(self):
+        self.assertEqual(dg.feature_state(None), ("not reported", "off"))
+
+
+class Knobs(unittest.TestCase):
+    def test_every_knob_gets_a_row(self):
+        kinds = {k.key: dg.knob_kind(k, ["intel_backlight"]) for k in dm.KNOBS}
+        self.assertEqual(kinds["F12_GUI"], "switch")
+        self.assertEqual(kinds["APPLY_METHOD"], "choice")
+        self.assertEqual(kinds["BACKLIGHT_SOURCE"], "choice")
+        self.assertEqual(kinds["BATTERY_LIMIT"], "entry")
+
+    def test_a_backlight_is_typed_when_the_kernel_lists_none(self):
+        knob = dm.KNOB_BY_KEY["BACKLIGHT_SOURCE"]
+        self.assertEqual(dg.knob_kind(knob, []), "entry")
+
+    def test_an_empty_choice_means_automatic(self):
+        target = dm.KNOB_BY_KEY["BACKLIGHT_TARGET"]
+        self.assertEqual(dg.knob_choices(target, ["a", "b"]), ["", "a", "b"])
+        self.assertEqual(dg.choice_label(""), "(automatic)")
+        method = dm.KNOB_BY_KEY["APPLY_METHOD"]
+        self.assertEqual(dg.knob_choices(method, ["a"]), ["temporary", "persistent"])
+
+    def test_every_knob_lands_in_a_section(self):
+        sections = {daemon for _t, daemon in dg.KNOB_GROUPS}
+        for k in dm.KNOBS:
+            self.assertIn(dg.knob_section(k), sections, k.key)
+
+    def test_a_daemon_knob_offers_a_restart(self):
+        ok, bad = dm.Result(True, "c"), dm.Result(False, "c")
+        self.assertEqual(dg.after_knob("F12_GUI", "0", ok), ("restart", "watch-fn"))
+        self.assertIsNone(dg.after_knob("F12_GUI", "0", bad))
+        self.assertIsNone(dg.after_knob("BATTERY_LIMIT", "80", ok))
+
+
+class Journal(unittest.TestCase):
+    def test_lines_and_errors_only(self):
+        now = 1_800_000_000
+        entries = [dm.Entry(now - 5, "keyboard initialised", unit="duo-watch-fn.service"),
+                   dm.Entry(now - 1, "apply failed", unit="duo-watch-displays.service")]
+        text = dg.journal_text(entries, now=now)
+        self.assertEqual(len(text.splitlines()), 2)
+        self.assertIn("watch-fn", text)
+        only = dg.journal_text(entries, errors_only=True, now=now)
+        self.assertEqual(only.splitlines()[0].split()[1:], ["watch-displays", "apply", "failed"])
+
+    def test_nothing_to_show_says_why(self):
+        self.assertIn("No journal", dg.journal_text([], error="No journal files were found."))
+        self.assertEqual(dg.journal_text([]), "Nothing logged yet.")
+
+    def test_it_keeps_the_newest_lines(self):
+        entries = [dm.Entry(1_800_000_000 + i, f"line {i}") for i in range(10)]
+        self.assertEqual(dg.journal_text(entries, limit=3).splitlines()[-1].split()[-1], "9")
+        self.assertEqual(len(dg.journal_text(entries, limit=3).splitlines()), 3)
+
+
+class Toggle(unittest.TestCase):
+    def test_f12_closes_only_the_focused_window(self):
+        self.assertTrue(dg.toggle_closes(visible=True, active=True))
+        self.assertFalse(dg.toggle_closes(visible=True, active=False))
+        self.assertFalse(dg.toggle_closes(visible=False, active=False))
+
+    def test_arguments(self):
+        self.assertEqual(dg.parse_args([]), (False, ""))
+        self.assertEqual(dg.parse_args(["--toggle", "--page", "logs"]), (True, "logs"))
+        for bad in (["--page"], ["--page", "nowhere"], ["--bogus"]):
+            with self.assertRaises(ValueError):
+                dg.parse_args(bad)
+
+    def test_bad_arguments_are_a_usage_error_before_any_gtk(self):
+        self.assertEqual(dg.main(["--bogus"]), 64)
+
+
+class Launcher(unittest.TestCase):
+    """The desktop file: GNOME groups the window under it by name."""
+
+    PATH = os.path.join(ROOT, "config", dg.APP_ID + ".desktop")
+
+    def test_it_is_named_after_the_application_id(self):
+        self.assertTrue(os.path.exists(self.PATH), self.PATH)
+
+    def test_exec_is_what_install_and_nix_rewrite(self):
+        cp = configparser.ConfigParser(interpolation=None)
+        cp.read(self.PATH)
+        entry = cp["Desktop Entry"]
+        # install.sh and nix/package.nix both replace exactly this prefix.
+        self.assertEqual(entry["Exec"], "/usr/local/bin/duo-cli gui")
+        self.assertEqual(entry["Type"], "Application")
+        self.assertEqual(entry["Terminal"], "false")
+
+
+if __name__ == "__main__":
+    unittest.main()

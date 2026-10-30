@@ -117,6 +117,29 @@ class Terminal(unittest.TestCase):
         self.assertIsNone(watch_fn.terminal_argv(lambda name: False))
 
 
+class Window(unittest.TestCase):
+    def test_f12_is_the_myasus_code_mainline_names(self):
+        # drivers/hid/hid-asus.c: `case 0x86: ... KEY_PROG1 ... /* MyASUS key */`.
+        self.assertEqual(watch_fn.DEFAULT_ACTIONS[0x86], "myasus")
+        self.assertIn("myasus", watch_fn.HANDLED)
+
+    def test_f12_toggles_the_window_in_its_own_unit(self):
+        from unittest import mock
+        d = Recorder()
+        with mock.patch.dict(os.environ, {"ZENDUO_F12_GUI": "1"}):
+            d.dispatch(0x86, "myasus")
+        self.assertEqual(d.spawned, [["systemd-run", "--user", "--collect", "--quiet",
+                                      "--", watch_fn.DUO, "gui", "--toggle"]])
+        self.assertTrue(watch_fn.DUO.endswith("/bin/duo-cli"))
+
+    def test_f12_gui_off_runs_nothing(self):
+        from unittest import mock
+        d = Recorder()
+        with mock.patch.dict(os.environ, {"ZENDUO_F12_GUI": "0"}):
+            d.dispatch(0x86, "myasus")
+        self.assertEqual(d.spawned, [])
+
+
 class FakeKeys:
     def __init__(self, fail=False):
         self.tapped, self.fail = [], fail

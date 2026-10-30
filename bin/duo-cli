@@ -37,6 +37,7 @@ export ZENDUO_REMEMBER_LAYOUT="${ZENDUO_REMEMBER_LAYOUT:-$(conf_get REMEMBER_LAY
 export ZENDUO_LOGIN_SCREEN_LAYOUT="${ZENDUO_LOGIN_SCREEN_LAYOUT:-$(conf_get LOGIN_SCREEN_LAYOUT)}"
 export ZENDUO_TOUCH_MAPPING="${ZENDUO_TOUCH_MAPPING:-$(conf_get TOUCH_MAPPING)}"
 export ZENDUO_F8_TERMINAL="${ZENDUO_F8_TERMINAL:-$(conf_get F8_TERMINAL)}"
+export ZENDUO_F12_GUI="${ZENDUO_F12_GUI:-$(conf_get F12_GUI)}"
 
 KBD_VID=0b05
 KBD_PID=1b2c
@@ -97,6 +98,8 @@ usage: duo-cli <command>        (duo <command> runs the same thing)
   watch-backlight [src [dst]]  daemon: keep dst backlight synced to src
   theme [show|dark|light|toggle]
                          GNOME's light/dark style, as Settings → Appearance sets it
+  gui [--toggle]         the same things in a GNOME window (GTK 4 + libadwaita);
+                         --toggle closes it when it is focused (what F12 runs)
   hotkeys apply|remove|show
                          F7 (which types Super+P) toggles dark mode instead of
                          GNOME's display switcher, or gets the switcher back
@@ -1031,6 +1034,7 @@ case "$cmd" in
   sync-backlight)     cmd_sync_backlight "$@" ;;
   watch-backlight)    cmd_watch_backlight "$@" ;;
   theme)              exec python3 "$LIB/theme.py" "$@" ;;
+  gui)                exec "$PYGI" "$LIB/duo_gui.py" "$@" ;;
   hotkeys)            cmd_hotkeys "$@" ;;
   kb-init)            cmd_kb_init "$@" ;;
   watch-fn)           cmd_watch_fn "$@" ;;

@@ -73,3 +73,7 @@ F7_DARK_MODE=1
 
 # F8 opens a terminal (Ctrl+Alt+T keeps working). Read by watch-fn.
 F8_TERMINAL=1
+
+# F12 (the MyASUS key) opens the duo window, and closes it again when it is
+# the focused window. Read by watch-fn; `duo gui` opens the window by hand.
+F12_GUI=1

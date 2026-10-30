@@ -6,14 +6,18 @@
 #   DUO_PYGI   the display code talks to Mutter over D-Bus through PyGObject.
 #              On Ubuntu `duo` pins /usr/bin/python3 for that (apt python3-gi);
 #              in the store we ship a python that has it instead.
+#   GI_TYPELIB_PATH  GLib for the display code; GTK 4 and libadwaita (and
+#              what they pull in) for `duo gui`, the window F12 opens.
 #   PATH       the few non-systemd tools the scripts call (gdbus, dconf,
 #              inotifywait, lspci, lsusb, logger). systemctl/journalctl are the
 #              host's and are deliberately not wrapped.
 { lib, stdenvNoCC, makeWrapper, python3, glib, gobject-introspection, dconf
-, inotify-tools, pciutils, usbutils, util-linux }:
+, inotify-tools, pciutils, usbutils, util-linux
+, gtk4, libadwaita, pango, gdk-pixbuf, graphene, harfbuzz }:
 
 let
   pyGi = python3.withPackages (ps: [ ps.pygobject3 ]);
+  typelibs = [ glib gobject-introspection gtk4 libadwaita pango gdk-pixbuf graphene harfbuzz ];
 in
 stdenvNoCC.mkDerivation {
   pname = "zenduo";
@@ -37,9 +41,12 @@ stdenvNoCC.mkDerivation {
     for name in duo duo-cli; do
       makeWrapper $out/lib/zenduo/bin/$name $out/bin/$name \
         --set-default DUO_PYGI ${pyGi}/bin/python3 \
-        --prefix GI_TYPELIB_PATH : ${lib.makeSearchPath "lib/girepository-1.0" [ glib gobject-introspection ]} \
+        --prefix GI_TYPELIB_PATH : ${lib.makeSearchPath "lib/girepository-1.0" (map lib.getLib typelibs)} \
         --prefix PATH : ${lib.makeBinPath [ python3 glib dconf inotify-tools pciutils usbutils util-linux ]}
     done
+    install -Dm644 config/io.github.zenduo.Duo.desktop $out/share/applications/io.github.zenduo.Duo.desktop
+    substituteInPlace $out/share/applications/io.github.zenduo.Duo.desktop \
+      --replace-fail "Exec=/usr/local/bin/duo-cli" "Exec=$out/bin/duo-cli"
     runHook postInstall
   '';
 

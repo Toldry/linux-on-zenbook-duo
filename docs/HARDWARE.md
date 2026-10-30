@@ -87,7 +87,10 @@ kept so code comments and the research stay cross-referenced.
   over Bluetooth, often every 30 s or so and right after the keyboard
   connected, and on 2026-10-30 came as `5a 3d 05 09` / `5a 3d 06 09` with no
   key touched — a status report with a value in its third byte. `watch-fn`
-  logs an unknown code once per run.
+  logs an unknown code once per run. Bare F12 (the MyASUS legend) is
+  **VERIFY-ON-HW**: `watch-fn` expects `86`, the code mainline hid-asus maps
+  to KEY_PROG1 as "MyASUS key" (drivers/hid/hid-asus.c, read 2026-10-30),
+  not yet captured on this unit.
 - **Bare F7 types Super+P** on the ordinary keyboard report (`02 08 00 13`:
   modifier Left GUI, usage P), with no vendor report, so GNOME raises its
   display switcher (measured 2026-10-30, `duo fn-probe` and `duo
