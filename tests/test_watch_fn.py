@@ -44,6 +44,11 @@ class FnRow(unittest.TestCase):
         d.dispatch(0x7E, "emoji")
         self.assertEqual(d.spawned, [["ibus", "emoji"]])
 
+    def test_f8_is_9c(self):
+        # 2026-10-30, fn-probe: three bare F8 presses, three `5a 9c`.
+        self.assertEqual(watch_fn.DEFAULT_ACTIONS[0x9C], "split-screen")
+        self.assertNotIn(0x3D, watch_fn.DEFAULT_ACTIONS)  # a status report
+
     def test_unknown_action_runs_nothing(self):
         d = Recorder()
         d.dispatch(0x3D, "unmapped-0x3d")
@@ -87,6 +92,29 @@ class FnRow(unittest.TestCase):
         self.assertEqual(table[0x3D], "camera-toggle")
         self.assertEqual(table[0x7E], "emoji")
         self.assertEqual(table[0x10], "brightness-down", "defaults survive an override file")
+
+
+class Terminal(unittest.TestCase):
+    def test_f8_opens_the_first_terminal_found_in_its_own_unit(self):
+        from unittest import mock
+        d = Recorder()
+        found = {"ptyxis", "gnome-terminal"}
+        with mock.patch.object(watch_fn.shutil, "which", side_effect=found.__contains__), \
+                mock.patch.dict(os.environ, {"ZENDUO_F8_TERMINAL": "1"}):
+            d.dispatch(0x9C, "split-screen")
+        self.assertEqual(d.spawned, [["systemd-run", "--user", "--collect", "--quiet",
+                                      "--", "ptyxis", "--new-window"]])
+
+    def test_f8_terminal_off_runs_nothing(self):
+        from unittest import mock
+        d = Recorder()
+        with mock.patch.dict(os.environ, {"ZENDUO_F8_TERMINAL": "0"}):
+            d.dispatch(0x9C, "split-screen")
+        self.assertEqual(d.spawned, [])
+
+    def test_xdg_terminal_exec_wins_when_present(self):
+        self.assertEqual(watch_fn.terminal_argv(lambda name: True), ["xdg-terminal-exec"])
+        self.assertIsNone(watch_fn.terminal_argv(lambda name: False))
 
 
 class FakeKeys:

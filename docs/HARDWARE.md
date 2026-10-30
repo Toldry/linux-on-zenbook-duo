@@ -81,11 +81,17 @@ kept so code comments and the research stay cross-referenced.
   brightness up, `4e` Fn-lock, `6a` second-screen key, `c7` keyboard backlight
   (all confirmed on this unit, July 2026). Seen in the journal 2026-09-05 and
   mapped by their mainline hid-asus meaning: `7c` mic mute, `7e` emoji picker
-  (**VERIFY-ON-HW** which keycaps; the legend says Fn+F9 and Fn+F11). Seen and
-  unidentified: `3d`, `9c` — `duo fn-map` attributes them. `3d` arrived 41
-  times on 2026-09-27, docked and over Bluetooth, often every 30 s or so and
-  right after the keyboard connected, which reads like a status report and
-  not a key; `watch-fn` logs an unknown code once per run. Volume and mute
+  (**VERIFY-ON-HW** which keycaps; the legend says Fn+F9 and Fn+F11). `9c` is
+  bare F8, followed by `5a 00` on release (measured 2026-10-30, `duo
+  fn-probe`). `3d` is not a key: it arrived 41 times on 2026-09-27, docked and
+  over Bluetooth, often every 30 s or so and right after the keyboard
+  connected, and on 2026-10-30 came as `5a 3d 05 09` / `5a 3d 06 09` with no
+  key touched — a status report with a value in its third byte. `watch-fn`
+  logs an unknown code once per run.
+- **Bare F7 types Super+P** on the ordinary keyboard report (`02 08 00 13`:
+  modifier Left GUI, usage P), with no vendor report, so GNOME raises its
+  display switcher (measured 2026-10-30, `duo fn-probe` and `duo
+  watch-input`). It can only be rebound in GNOME's shortcuts: `duo hotkeys`. Volume and mute
   arrive as standard consumer-page usages and work natively.
 - **Keyboard backlight** is `{0x5a, 0xba, 0xc5, 0xc4, level}` padded to the
   interface's report length. Docking, undocking and resume blank it in

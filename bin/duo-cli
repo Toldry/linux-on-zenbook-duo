@@ -36,6 +36,7 @@ export ZENDUO_KB_BACKLIGHT_RESTORE="${ZENDUO_KB_BACKLIGHT_RESTORE:-$(conf_get KB
 export ZENDUO_REMEMBER_LAYOUT="${ZENDUO_REMEMBER_LAYOUT:-$(conf_get REMEMBER_LAYOUT)}"
 export ZENDUO_LOGIN_SCREEN_LAYOUT="${ZENDUO_LOGIN_SCREEN_LAYOUT:-$(conf_get LOGIN_SCREEN_LAYOUT)}"
 export ZENDUO_TOUCH_MAPPING="${ZENDUO_TOUCH_MAPPING:-$(conf_get TOUCH_MAPPING)}"
+export ZENDUO_F8_TERMINAL="${ZENDUO_F8_TERMINAL:-$(conf_get F8_TERMINAL)}"
 
 KBD_VID=0b05
 KBD_PID=1b2c
@@ -93,6 +94,11 @@ usage: duo-cli <command>        (duo <command> runs the same thing)
                          the brightness keys do on GNOME 49+)
   sync-backlight [src [dst]]   copy panel backlight percentage src -> dst
   watch-backlight [src [dst]]  daemon: keep dst backlight synced to src
+  theme [show|dark|light|toggle]
+                         GNOME's light/dark style, as Settings → Appearance sets it
+  hotkeys apply|remove|show
+                         F7 (which types Super+P) toggles dark mode instead of
+                         GNOME's display switcher, or gets the switcher back
   kb-init                switch the keyboard into hotkey mode (enables Fn/media keys)
   watch-fn               daemon: init keyboard on connect + act on media keys
   kb-backlight <0-3>     keyboard backlight (native LED if present, else HID);
@@ -708,6 +714,16 @@ cmd_kb_backlight() {
   python3 "$LIB/kb_backlight.py" "$level"
 }
 
+cmd_hotkeys() {
+  # The shortcut runs this very duo-cli, by an absolute path: GNOME starts it
+  # without the login shell's PATH.
+  if [ "${1:-}" = apply ]; then
+    python3 "$LIB/hotkeys.py" apply "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+  else
+    python3 "$LIB/hotkeys.py" "$@"
+  fi
+}
+
 cmd_bat_limit() {
   local pct="${1:-}"
   if [ -z "$pct" ]; then
@@ -1013,6 +1029,8 @@ case "$cmd" in
   apply-displays)     exec "$PYGI" "$LIB/watch_displays.py" --once "$@" ;;
   sync-backlight)     cmd_sync_backlight "$@" ;;
   watch-backlight)    cmd_watch_backlight "$@" ;;
+  theme)              exec python3 "$LIB/theme.py" "$@" ;;
+  hotkeys)            cmd_hotkeys "$@" ;;
   kb-init)            cmd_kb_init "$@" ;;
   watch-fn)           cmd_watch_fn "$@" ;;
   kb-backlight)       cmd_kb_backlight "$@" ;;

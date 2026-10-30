@@ -31,7 +31,9 @@ What the machine does under Windows, whether it does it here, and how.
 | Fn-row: volume, mute | native consumer-page usages | ✅ |
 | Fn-row: Fn-lock (Fn+Esc) | captured (`5a 4e`), swap not performed | 🧪 → phase Q |
 | Fn-row: mic mute, emoji | `watch-fn` → `wpctl set-mute … toggle`, `ibus emoji` (codes `5a 7c`/`5a 7e`, per hid-asus) | 🧪 2026-09-05 → verify which keycaps |
-| Fn-row: display switch, camera, MyASUS | captured by `fn-map`, unmapped (`5a 3d`, `5a 9c` seen, unattributed) | 📝 phase Q |
+| Fn-row: F7 (types Super+P) | toggles dark mode: `duo hotkeys apply` moves Super+P from GNOME's switcher to `duo theme toggle` (`F7_DARK_MODE`) | ✅ 2026-10-30 |
+| Fn-row: F8 (`5a 9c`) | `watch-fn` opens the default terminal (`F8_TERMINAL`) | 🧪 2026-10-30 |
+| Fn-row: camera, MyASUS | not attributed yet (`5a 3d` is a status report, not a key) | 📝 phase Q |
 | Keyboard backlight level remembered across dock/undock/sleep | state file + restore on re-init | ✅ |
 | Wi-Fi keeps working when the keyboard comes off | kernel ≥ 6.11 | ✅ |
 | Palm rejection while typing | libinput quirk + disable-while-typing | ✅ |

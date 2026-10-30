@@ -29,6 +29,7 @@ or by hand: `duo watch-fn`. Needs the udev uaccess rule for hidraw access.
 import json
 import os
 import select
+import shutil
 import subprocess
 import sys
 import time
@@ -57,15 +58,33 @@ DEFAULT_ACTIONS = {
     # 22 and 20 presses) and are the codes mainline hid-asus maps to
     # KEY_MICMUTE and KEY_EMOJI_PICKER (drivers/hid/hid-asus.c,
     # asus_input_mapping). VERIFY-ON-HW which keycap sends which — the legend
-    # says Fn+F9 and Fn+F11. Also seen and still unknown: 0x3d (22), 0x9c (4).
+    # says Fn+F9 and Fn+F11.
     0x7C: "mic-mute",
     0x7E: "emoji",
+    # Measured 2026-10-30 with `duo fn-probe`: three bare F8 presses sent
+    # `5a 9c` then `5a 00` each, and nothing else. Bare F7 sends no vendor
+    # report at all, only a typed Super+P (see lib/hotkeys.py).
+    0x9C: "split-screen",
 }
 
 # Actions from a fn-map.json we know how to perform (everything else logged).
 # The actions dispatch() acts on (fn-lock only on purpose: see the docstring).
 HANDLED = {"brightness-down", "brightness-up", "kbd-backlight", "second-screen",
-           "mic-mute", "emoji", "fn-lock"}
+           "mic-mute", "emoji", "fn-lock", "split-screen"}
+
+# F8 (split-screen) opens a terminal. xdg-terminal-exec is the freedesktop
+# launcher that honours the user's chosen terminal; the rest are GNOME's own,
+# newest first, for systems without it.
+TERMINALS = (["xdg-terminal-exec"], ["ptyxis", "--new-window"], ["kgx"],
+             ["gnome-terminal"])
+
+
+def terminal_argv(which=None):
+    which = which or shutil.which
+    for argv in TERMINALS:
+        if which(argv[0]):
+            return argv
+    return None
 
 KNOWN_ACTIONS = {"brightness-down", "brightness-up", "fn-lock", "second-screen",
                  "kbd-backlight", "mute", "volume-down", "volume-up",
@@ -103,9 +122,10 @@ def load_overrides():
 
 # Codes with no action here are logged once per run. 0x3d arrived 41 times
 # on 2026-09-27, docked and on Bluetooth, often every 30 s or so and right
-# after the keyboard connected: that reads like a status report from the
-# keyboard, not a key press. Two lines per arrival filled the screen's
-# "Recent problems" with nothing else.
+# after the keyboard connected: a status report from the keyboard, not a key
+# press (2026-10-30, fn-probe: `5a 3d 05 09`, `5a 3d 06 09` with no key
+# touched — the third byte changes, so it carries a value). Two lines per
+# arrival filled the screen's "Recent problems" with nothing else.
 class Dispatcher:
     def __init__(self):
         self.children = []  # (Popen, argv), reaped by reap()
@@ -251,6 +271,19 @@ class Dispatcher:
             # it. The unit sees WAYLAND_DISPLAY through the session's imported
             # environment, same as gdbus does for brightness.
             self.spawn(["ibus", "emoji"])
+        elif action == "split-screen":
+            if os.environ.get("ZENDUO_F8_TERMINAL", "1") != "1":
+                return  # F8_TERMINAL=0 in zenduo.conf
+            argv = terminal_argv()
+            if argv is None:
+                log("no terminal found (looked for "
+                    + ", ".join(t[0] for t in TERMINALS) + ")")
+            else:
+                # In a unit of its own: a child of this service would be in
+                # its cgroup, and restarting duo-watch-fn would close every
+                # terminal F8 ever opened.
+                self.spawn(["systemd-run", "--user", "--collect", "--quiet",
+                            "--", *argv])
         elif action == "fn-lock":
             pass  # see the module docstring: the swap is not ours to perform yet
 
