@@ -53,9 +53,10 @@ user_half() {
       rm -f "$launcher"; log "removed $launcher"
     fi
   fi
-  # Super+P back to GNOME's display switcher, only if F7 was ours.
+  # Super+P back to GNOME's display switcher, unless it is there already.
   case "$(python3 lib/hotkeys.py show 2>/dev/null)" in
-    *"theme toggle"*) python3 lib/hotkeys.py remove || true ;;
+    ""|*"display switcher"*) ;;
+    *) python3 lib/hotkeys.py remove || true ;;
   esac
   local floor="${XDG_CONFIG_HOME:-$HOME/.config}/pipewire/pipewire.conf.d/10-zenduo-min-quantum.conf"
   if [ -e "$floor" ]; then

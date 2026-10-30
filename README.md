@@ -24,7 +24,7 @@ OLED flicker is gone.
 | Bottom panel off while the keyboard is docked, on when lifted; survives suspend, hotplug, lock, GNOME Settings changes | ScreenXpert | `duo watch-displays` | ✅ on hardware, daily since 2026-07-23 |
 | Manual panel control that never blanks the machine; Win+P layouts (external only, mirror) are respected | Win+P | `duo top/bottom/both/toggle` | ✅ |
 | Fn/media keys: brightness (with GNOME's OSD, both panels), second-screen key, keyboard-backlight key; volume/mute are native | ASUS driver | `duo watch-fn` (sends the same handshake the kernel driver would) | ✅ USB and Bluetooth |
-| F7 toggles dark mode, F8 opens a terminal, F12 opens the duo window | — | `duo hotkeys`, `duo watch-fn` | ✅ F7 · 🧪 F8, F12 |
+| F7 opens a terminal, F8 toggles dark mode, F12 opens the duo window | — | `duo hotkeys`, `duo watch-fn` | ✅ F7 · 🧪 F8, F12 |
 | Keyboard backlight 0–3, remembered and restored after dock/undock/resume | ASUS driver | `duo kb-backlight` | ✅ |
 | Bottom panel brightness follows the top panel | ASUS driver | brightness keys, `duo sync-backlight`, optional `duo watch-backlight` | ✅ |
 | Battery charge limit (e.g. 80 %) re-applied at every login | MyASUS | `duo bat-limit`, `BATTERY_LIMIT` in the config | ✅ |
@@ -115,8 +115,8 @@ Knobs live in `~/.config/zenduo/zenduo.conf` ([annotated example](config/zenduo.
 | `DOCK_POLICY` | `1` | `0` keeps `watch-displays` running but makes it watch without acting |
 | `REMEMBER_LAYOUT` | `1` | Remember the display layout per set of connected monitors and let GNOME restore it (see below) |
 | `LOGIN_SCREEN_LAYOUT` | `1` | Give the GDM greeter the same layouts, so the password prompt is on the monitor you were using |
-| `F7_DARK_MODE` | `1` | F7 (which types Super+P) toggles dark mode instead of GNOME's display switcher |
-| `F8_TERMINAL` | `1` | F8 opens a terminal |
+| `F7_TERMINAL` | `1` | F7 (which types Super+P) opens a terminal instead of GNOME's display switcher |
+| `F8_DARK_MODE` | `1` | F8 toggles dark mode |
 | `F12_GUI` | `1` | F12 (the MyASUS key) opens the duo window, and closes it when it is focused |
 
 System-level features are flags on the installer, so they can be switched
@@ -229,7 +229,12 @@ grid, or **F12**. Press F12 again while the window has focus and it closes.
   features with the installer flag that changes them.
 - **Settings**: every knob. When the daemon that reads it is running, the
   window offers to restart it.
-- **Logs** and **Doctor**: the zenduo journal, and `duo doctor` coloured.
+- **Logs** and **Doctor**: the zenduo journal, and `duo doctor` coloured,
+  each with a button that copies what is shown.
+
+Failures pop up with what the command said; a click that worked just shows
+its result on the page. The ⓘ button and the link under Overview lead to this
+repository.
 
 Like the screen, it changes nothing itself: every button is a `duo-cli` or
 `systemctl --user` command, and its toast says what that command printed. It
@@ -275,6 +280,8 @@ duo features               every feature with its installed/enabled/running stat
 duo enable|disable <f>     turn a feature on/off (and start/stop it now)
 duo config [get K|set K V] the knobs in ~/.config/zenduo/zenduo.conf
 duo gui [--toggle]         the window (F12); --toggle closes it when it is focused
+duo theme [toggle]         light or dark style (F8)
+duo terminal               open the default terminal (F7)
 duo top|bottom|both        enable that panel set (refuses to disable everything);
                            pauses the dock policy until the keyboard docks/undocks
 duo toggle                 bottom panel on <-> off, leaving every other output alone
