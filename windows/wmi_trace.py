@@ -79,6 +79,36 @@ def interesting(events):
     return [e for e in events if INTERESTING.search(" ".join(e["data"].values()))]
 
 
+class WmiTrace:
+    """Enables the WMI-Activity analytic channel; stop() reads it back.
+
+    An enabled analytic channel cannot be read, so nothing is visible until
+    stop(); the events are matched to markers afterwards by their time.
+    """
+
+    def start(self):
+        """Clear and enable the channel. Returns an error string, or None."""
+        wevtutil("sl", CHANNEL, "/e:false", check=False)
+        wevtutil("cl", CHANNEL, check=False)
+        enabled = wevtutil("sl", CHANNEL, "/e:true", "/q:true", check=False)
+        if enabled.returncode:
+            return f"could not enable {CHANNEL}: {enabled.stderr.strip()} (Administrator?)"
+        return None
+
+    def stop(self, out):
+        """Disable, export to `out`, write wmi.jsonl; returns the kept events."""
+        wevtutil("sl", CHANNEL, "/e:false", check=False)
+        exported = wevtutil("qe", CHANNEL, "/f:xml", check=False).stdout
+        with open(os.path.join(out, "wmi-activity.xml"), "w", encoding="utf-8") as f:
+            f.write(exported)
+        log = zenduo_re.JsonLog(os.path.join(out, "wmi.jsonl"))
+        kept = interesting(parse_events(exported))
+        for event in kept:
+            log.write({"type": "wmi", **event})
+        log.close()
+        return kept
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--scenario", choices=sorted(zenduo_re.SCENARIOS))
@@ -96,25 +126,16 @@ def main(argv=None):
     zenduo_re.require_windows("wmi_trace")
     out = zenduo_re.session_dir("wmi", args.out)
     markers = zenduo_re.JsonLog(os.path.join(out, "markers.jsonl"))
-    wevtutil("sl", CHANNEL, "/e:false", check=False)
-    wevtutil("cl", CHANNEL, check=False)
-    enabled = wevtutil("sl", CHANNEL, "/e:true", "/q:true", check=False)
-    if enabled.returncode:
-        sys.exit(f"wmi_trace: could not enable {CHANNEL}: {enabled.stderr.strip()}"
-                 " (Administrator?)")
+    trace = WmiTrace()
+    error = trace.start()
+    if error:
+        sys.exit(f"wmi_trace: {error}")
     try:
-        zenduo_re.run_markers(markers, args.scenario)
+        zenduo_re.run_steps(markers, args.scenario)
     finally:
-        wevtutil("sl", CHANNEL, "/e:false", check=False)
-    exported = wevtutil("qe", CHANNEL, "/f:xml", check=False).stdout
-    with open(os.path.join(out, "wmi-activity.xml"), "w", encoding="utf-8") as f:
-        f.write(exported)
-    log = zenduo_re.JsonLog(os.path.join(out, "wmi.jsonl"))
-    kept = interesting(parse_events(exported))
+        kept = trace.stop(out)
     for event in kept:
-        log.write({"type": "wmi", **event})
         print(event["time"], event["data"].get("Operation", ""))
-    log.close()
     print(f"{len(kept)} WMI operations kept; written {out}")
     return 0
 

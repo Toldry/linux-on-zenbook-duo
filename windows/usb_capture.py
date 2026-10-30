@@ -1,7 +1,7 @@
 r"""Record the USB traffic to the docked keyboard, cut by action.
 
     py usb_capture.py --list-interfaces
-    py usb_capture.py --scenario keyboard
+    py usb_capture.py --scenario keyboard-docked
     py usb_capture.py --scenario attach --interface \\.\USBPcap2
 
 Needs USBPcap: install Wireshark (https://www.wireshark.org/download.html)
@@ -22,6 +22,7 @@ The USBPcapCMD options used are -d, -o, -A and --inject-descriptors (from its
 """
 
 import argparse
+import glob
 import os
 import re
 import subprocess
@@ -31,6 +32,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import zenduo_re  # noqa: E402
 
 DEFAULT_EXE = r"C:\Program Files\USBPcap\USBPcapCMD.exe"
+NOT_FOUND = ("USBPcapCMD.exe not found. Install Wireshark with the USBPcap"
+             " component ticked and reboot, or pass --exe.")
 
 
 def parse_extcap_interfaces(text):
@@ -38,19 +41,64 @@ def parse_extcap_interfaces(text):
     return re.findall(r"interface \{value=([^}]+)\}", text)
 
 
-def find_exe(explicit):
+def find_exe(explicit=None):
+    """USBPcapCMD.exe, or None."""
     for candidate in (explicit, DEFAULT_EXE,
                       r"C:\Program Files\Wireshark\extcap\USBPcapCMD.exe"):
         if candidate and os.path.isfile(candidate):
             return candidate
-    sys.exit("usb_capture: USBPcapCMD.exe not found. Install Wireshark with the"
-             " USBPcap component ticked and reboot, or pass --exe.")
+    return None
 
 
 def list_interfaces(exe):
     result = subprocess.run([exe, "--extcap-interfaces"], capture_output=True, text=True,
                             timeout=30)
     return parse_extcap_interfaces(result.stdout)
+
+
+class UsbCapture:
+    """One USBPcapCMD per root hub, writing <hub>.pcap into `out`."""
+
+    def __init__(self, exe, interfaces, out, log, extra_args=()):
+        self.exe, self.interfaces, self.out = exe, interfaces, out
+        self.log, self.extra_args = log, list(extra_args)
+        self.processes = []
+
+    def start(self):
+        for interface in self.interfaces:
+            name = interface.strip("\\.").replace("\\", "_")
+            path = os.path.join(self.out, f"{name}.pcap")
+            command = [self.exe, "-d", interface, "-o", path, "-A",
+                       "--inject-descriptors", *self.extra_args]
+            self.log.write({"type": "capture", "interface": interface, "file": path,
+                            "command": command})
+            self.processes.append(subprocess.Popen(
+                command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE))
+
+    def bytes_written(self):
+        total = 0
+        for path in glob.glob(os.path.join(self.out, "*.pcap")):
+            try:
+                total += os.path.getsize(path)
+            except OSError:
+                pass
+        return total
+
+    def stop(self):
+        """Stop every capture; returns the error text of any that failed."""
+        errors = []
+        for process in self.processes:
+            process.terminate()
+        for process in self.processes:
+            try:
+                _, err = process.communicate(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                err = b""
+            if process.returncode not in (0, 1, None) and err:
+                errors.append(err.decode(errors="replace").strip())
+        return errors
 
 
 def main(argv=None):
@@ -67,6 +115,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     exe = find_exe(args.exe)
+    if not exe:
+        sys.exit(NOT_FOUND)
     interfaces = args.interface or list_interfaces(exe)
     if args.list_interfaces or not interfaces:
         print("\n".join(interfaces) or "No USBPcap interfaces. Reboot after installing USBPcap.")
@@ -74,32 +124,15 @@ def main(argv=None):
 
     out = zenduo_re.session_dir("usb", args.out)
     markers = zenduo_re.JsonLog(os.path.join(out, "markers.jsonl"))
-    processes = []
-    for interface in interfaces:
-        name = interface.strip("\\.").replace("\\", "_")
-        path = os.path.join(out, f"{name}.pcap")
-        command = [exe, "-d", interface, "-o", path, "-A", "--inject-descriptors",
-                   *args.usbpcap_arg]
-        markers.write({"type": "capture", "interface": interface, "file": path,
-                       "command": command})
-        processes.append(subprocess.Popen(command, stdin=subprocess.DEVNULL,
-                                          stdout=subprocess.DEVNULL,
-                                          stderr=subprocess.PIPE))
-        print(f"capturing {interface} -> {path}")
+    capture = UsbCapture(exe, interfaces, out, markers, args.usbpcap_arg)
+    capture.start()
+    print(f"capturing {', '.join(interfaces)}")
     try:
-        zenduo_re.run_markers(markers, args.scenario)
+        zenduo_re.run_steps(markers, args.scenario)
     finally:
-        for process in processes:
-            process.terminate()
-        for process in processes:
-            try:
-                _, err = process.communicate(timeout=10)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                err = b""
-            if process.returncode not in (0, 1, None) and err:
-                print(err.decode(errors="replace").strip())
-    print(f"written {out}\nnext: python analyze.py {out}")
+        for error in capture.stop():
+            print(error)
+    print(f"written {out}\nnext: py analyze.py {out}")
     return 0
 
 

@@ -78,26 +78,119 @@ class HidMeanings(unittest.TestCase):
         self.assertIsNone(zenduo_re.describe_vendor_input(bytes([0x01, 0x02])))
 
 
-class Markers(unittest.TestCase):
-    def test_free_form_markers_and_labels(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            log = zenduo_re.JsonLog(os.path.join(tmp, "m.jsonl"))
-            n = zenduo_re.run_markers(log, None, out=io.StringIO(),
-                                      inp=io.StringIO("fan whisper\n\nq\n"))
-            log.close()
-            self.assertEqual(n, 1)
-            labels = [m["label"] for m in zenduo_re.read_jsonl(log.path)]
-            self.assertEqual(labels, ["capture started", "fan whisper", "capture stopped"])
+class FakeKeys:
+    """Key presses from a list; None (nothing pressed) once it runs out."""
 
-    def test_scenario_skip_and_stop(self):
+    def __init__(self, keys=(), lines=()):
+        self.keys, self.lines = list(keys), list(lines)
+
+    def get(self, timeout=None):
+        if self.keys:
+            return self.keys.pop(0)
+        if timeout is None:
+            return "q"          # a blocking wait with nothing left: stop
+        return None
+
+    def line(self):
+        return self.lines.pop(0) if self.lines else ""
+
+
+class Markers(unittest.TestCase):
+    def run_steps(self, scenario, keys, **kwargs):
         with tempfile.TemporaryDirectory() as tmp:
             log = zenduo_re.JsonLog(os.path.join(tmp, "m.jsonl"))
-            n = zenduo_re.run_markers(log, "power", out=io.StringIO(),
-                                      inp=io.StringIO("\ns\nq\n\n"))
+            out = io.StringIO()
+            n = zenduo_re.run_steps(log, scenario, keys=keys, out=out, **kwargs)
             log.close()
-            self.assertEqual(n, 1)
-            steps = [m.get("step") for m in zenduo_re.read_jsonl(log.path) if "step" in m]
-            self.assertEqual(steps, [1])
+            return n, zenduo_re.read_jsonl(log.path), out.getvalue()
+
+    def test_free_form_markers_and_labels(self):
+        n, records, _ = self.run_steps(None, FakeKeys(lines=["fan whisper\n", "\n", "q\n"]))
+        self.assertEqual(n, 1)
+        self.assertEqual([m["label"] for m in records],
+                         ["capture started", "fan whisper", "capture stopped"])
+
+    def test_marker_is_written_when_the_step_is_shown(self):
+        # Step 1 of power is an action: shown, marked, then Enter = done.
+        # Step 2 is skipped (it gets a "skipped:" marker), then q stops.
+        n, records, out = self.run_steps("power", FakeKeys(["enter", "s", "q"]))
+        self.assertEqual(n, 1)
+        steps = [(m.get("step"), m.get("skipped", False)) for m in records if "step" in m]
+        self.assertEqual(steps, [(1, False), (2, False), (2, True), (3, False)])
+        self.assertIn("STEP 1/", out)
+        self.assertNotIn("\x1b[", out)       # no colour codes into a non-console
+
+    def test_keyboard_state_step_ends_by_itself(self):
+        states = iter(["none", "none", "docked"])
+        n, records, out = self.run_steps(
+            "keyboard-docked", FakeKeys([None, None, "q"]),
+            detect=lambda: next(states, "docked"))
+        self.assertEqual(n, 1)                # step 1 done without a key, then q
+        self.assertIn("seen: keyboard docked", out)
+        self.assertIn("must be DOCKED", out)
+
+    def test_keyboard_moved_mid_run_holds_the_step(self):
+        # Step 3 (F4) finds the keyboard on Bluetooth in a docked run: the
+        # step waits, the keyboard comes back, then the step needs its Enter.
+        states = iter(["docked", "docked", "bluetooth", "bluetooth", "docked"])
+        keys = FakeKeys(["s", None, "enter", "q"])     # skip the countdown
+        n, records, out = self.run_steps("keyboard-docked", keys,
+                                         detect=lambda: next(states, "docked"))
+        self.assertIn("not where this run needs it", out)
+        self.assertEqual(n, 2)                # dock, F4; the countdown was skipped
+
+    def test_without_detection_the_state_step_asks_for_enter(self):
+        n, _, out = self.run_steps("attach", FakeKeys(["enter", "q"]))
+        self.assertEqual(n, 1)
+        self.assertIn("Enter once the keyboard is DOCKED", out)
+
+    def test_countdown_runs_out_on_its_own(self):
+        quiet = FakeKeys(["enter", "enter"] + [None] * 10 + ["q"])
+        n, _, out = self.run_steps("power", quiet)
+        self.assertEqual(n, 3)                # charger, open MyASUS, 10 s baseline
+        self.assertIn("hands off:   1 s left", out)
+
+    def test_after_step_summary_is_shown(self):
+        n, _, out = self.run_steps("power", FakeKeys(["enter", "q"]),
+                                   after_step=lambda i: f"caught {i}")
+        self.assertIn("✓ caught 1", out)
+
+    def test_every_scenario_is_well_formed(self):
+        for name, plan in zenduo_re.SCENARIOS.items():
+            self.assertTrue(plan["steps"], name)
+            self.assertIn(plan["keyboard"], (None, *zenduo_re.KEYBOARD_STATES), name)
+            for current in plan["steps"]:
+                self.assertIn(current.needs, (None, *zenduo_re.KEYBOARD_STATES), name)
+                self.assertTrue(current.do.endswith((".", ")")), current.do)
+        self.assertEqual(zenduo_re.SCENARIOS["keyboard-docked"]["steps"][0].needs, "docked")
+        self.assertEqual(zenduo_re.SCENARIOS["keyboard-bluetooth"]["steps"][1].needs,
+                         "bluetooth")
+
+    def test_keyboard_transport_from_paths(self):
+        usb = r"\\?\hid#vid_0b05&pid_1b2c&mi_04&col01#7&1&0000#{4d1e55b2-f16f}"
+        bt = (r"\\?\hid#{00001124-0000-1000-8000-00805f9b34fb}_vid&00020b05"
+              r"_pid&1b2d&col03#8&2&0002#{4d1e55b2-f16f}")
+        other = r"\\?\hid#vid_046d&pid_c52b&mi_02#7&2&0000#{4d1e55b2-f16f}"
+        self.assertEqual(zenduo_re.keyboard_transport([other, usb]), "docked")
+        self.assertEqual(zenduo_re.keyboard_transport([bt, other]), "bluetooth")
+        self.assertEqual(zenduo_re.keyboard_transport([other]), "none")
+        self.assertTrue(zenduo_re.is_bluetooth_path(bt))
+        self.assertFalse(zenduo_re.is_bluetooth_path(usb))
+
+    def test_event_log_counts_per_step(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            events = zenduo_re.EventLog(os.path.join(tmp, "events.log"))
+            events.add("ATK call", "a")
+            events.add("ATK call", "b")
+            events.add(None, "hooked x")
+            self.assertEqual(zenduo_re.count_summary(events.take_counts()), "2 ATK calls")
+            events.add("HID write", "c")
+            self.assertEqual(zenduo_re.count_summary(events.take_counts()), "1 HID write")
+            self.assertEqual(zenduo_re.count_summary(events.take_counts()),
+                             "nothing captured")
+            events.close()
+            events.add("ATK call", "after close is ignored")
+            self.assertEqual(events.total["ATK call"], 2)
 
     def test_label_for(self):
         markers = [{"ts": 10, "label": "a"}, {"ts": 20, "label": "b"}]

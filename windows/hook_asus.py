@@ -3,6 +3,7 @@ r"""Log what the ASUS software asks the hardware to do, from inside it.
     py -m pip install frida
     py hook_asus.py --list                   which processes would be hooked
     py hook_asus.py --scenario power         hook them and walk the scenario
+                                             (capture.py does this and more)
     py hook_asus.py --pid 1234 --all-ioctls  one process, every DeviceIoControl
 
 Run from an Administrator terminal: the ASUS services run as SYSTEM.
@@ -19,8 +20,9 @@ hooks, in user space:
     HidD_GetInputReport: keyboard commands, whatever the transport. This is
     the one view that covers Bluetooth without an air sniffer.
 
-Each call is written to hooks.jsonl with the marker that was current, and the
-ATK calls are decoded on the spot (zenduo_re.decode_ioctl).
+Each call is written to hooks.jsonl, and one readable line to events.log, with
+the ATK calls decoded on the spot (zenduo_re.decode_ioctl). The screen shows
+only the steps. HookSession is what capture.py uses.
 
 What it cannot see (docs/WINDOWS-RE.md, "Gaps"): anything done in a kernel
 driver; WMI method calls (they reach the BIOS through the WMI service, not
@@ -194,6 +196,121 @@ def summary_line(payload):
     return api or ""
 
 
+def event_kind(payload):
+    """What an agent message counts as on the step summary, or None."""
+    api = payload.get("api", "")
+    if api == "DeviceIoControl":
+        return {"atk": "ATK call", "atk-event": "ATK event"}.get(
+            payload["decoded"]["kind"], "HID ioctl")
+    if api.startswith("HidD_Set"):
+        return "HID write"
+    if api.startswith("HidD_Get"):
+        return "HID read"
+    return None
+
+
+def import_frida():
+    try:
+        import frida
+    except ImportError as error:
+        # Installed but unloadable is the common case, not missing: the name
+        # alone would send people to reinstall a package pip says is there.
+        sys.exit(f"cannot import Frida ({error}).\n"
+                 "Not installed: py -m pip install frida\n"
+                 "'DLL load failed': install the Microsoft Visual C++ Redistributable"
+                 " (x64), https://aka.ms/vs/17/release/vc_redist.x64.exe")
+    return frida
+
+
+class HookSession:
+    """Frida hooks in every matching process, re-scanned until stop().
+
+    Calls go to `log` (hooks.jsonl) and one readable line each to `events`
+    (zenduo_re.EventLog); nothing is printed, so a step runner can own the
+    screen.
+    """
+
+    def __init__(self, frida, log, events, match=DEFAULT_MATCH, pids=None,
+                 all_ioctls=False, rescan=5.0):
+        self.device = frida.get_local_device()
+        self.log, self.events = log, events
+        self.match, self.pids, self.rescan = match, pids, rescan
+        self.source = AGENT_JS % {"all_ioctls": "true" if all_ioctls else "false"}
+        self.sessions = {}          # pid -> frida session, or None if it failed
+        self.names = {}
+        self._lock = threading.Lock()
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._scan_forever, daemon=True)
+
+    def start(self):
+        self._thread.start()
+
+    def hooked(self):
+        with self._lock:
+            return [f"{self.names[pid]} ({pid})"
+                    for pid, s in self.sessions.items() if s is not None]
+
+    def failed(self):
+        with self._lock:
+            return [f"{self.names[pid]} ({pid})"
+                    for pid, s in self.sessions.items() if s is None]
+
+    def _on_message(self, pid, name):
+        def handler(message, _data):
+            if message.get("type") != "send":
+                error = message.get("description", str(message))
+                self.log.write({"type": "agent-error", "pid": pid, "process": name,
+                                "error": error})
+                self.events.add(None, f"{name}: agent error {error}")
+                return
+            payload = enrich(dict(message["payload"]))
+            payload.update({"type": "call", "pid": pid, "process": name})
+            self.log.write(payload)
+            if payload.get("api") != "ready":
+                self.events.add(event_kind(payload), f"{name}: {summary_line(payload)}")
+        return handler
+
+    def _attach(self, pid, name):
+        self.names[pid] = name
+        try:
+            session = self.device.attach(pid)
+            script = session.create_script(self.source)
+            script.on("message", self._on_message(pid, name))
+            script.load()
+            self.sessions[pid] = session
+            self.log.write({"type": "attached", "pid": pid, "process": name})
+            self.events.add(None, f"hooked {name} ({pid})")
+        except Exception as error:      # frida raises a family of its own
+            self.log.write({"type": "attach-failed", "pid": pid, "process": name,
+                            "error": str(error)})
+            self.events.add(None, f"could not hook {name} ({pid}): {error}")
+            self.sessions[pid] = None   # do not retry every scan
+
+    def _scan_forever(self):
+        own_pid = os.getpid()
+        while not self._stop.is_set():
+            with self._lock:
+                if self.pids:
+                    wanted = [(pid, f"pid{pid}") for pid in self.pids]
+                else:
+                    wanted = [(p.pid, p.name) for p in
+                              target_processes(self.device, self.match, own_pid)]
+                for pid, name in wanted:
+                    if pid not in self.sessions:
+                        self._attach(pid, name)
+            self._stop.wait(self.rescan)
+
+    def stop(self):
+        self._stop.set()
+        with self._lock:
+            for session in self.sessions.values():
+                if session is not None:
+                    try:
+                        session.detach()
+                    except Exception:
+                        pass
+
+
 def main(argv=None):
     zenduo_re.require_windows("hook_asus")
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
@@ -207,88 +324,30 @@ def main(argv=None):
     parser.add_argument("--rescan", type=float, default=5.0, help="seconds between scans")
     parser.add_argument("--out", help="parent folder for the session (default windows/captures)")
     args = parser.parse_args(argv)
-    try:
-        import frida
-    except ImportError as error:
-        # Installed but unloadable is the common case, not missing: the name
-        # alone would send people to reinstall a package pip says is there.
-        sys.exit(f"hook_asus: cannot import Frida ({error}).\n"
-                 "Not installed: py -m pip install frida\n"
-                 "'DLL load failed': install the Microsoft Visual C++ Redistributable"
-                 " (x64), https://aka.ms/vs/17/release/vc_redist.x64.exe")
+    frida = import_frida()
 
-    device = frida.get_local_device()
-    own_pid = os.getpid()
     if args.list:
-        for p in target_processes(device, args.match, own_pid):
+        for p in target_processes(frida.get_local_device(), args.match, os.getpid()):
             print(f"{p.pid:>7}  {p.name}")
         return 0
 
     out = zenduo_re.session_dir("hooks", args.out)
     log = zenduo_re.JsonLog(os.path.join(out, "hooks.jsonl"))
+    events = zenduo_re.EventLog(os.path.join(out, "events.log"))
     markers = zenduo_re.JsonLog(os.path.join(out, "markers.jsonl"))
-    source = AGENT_JS % {"all_ioctls": "true" if args.all_ioctls else "false"}
-    sessions = {}
-    lock = threading.Lock()
-    stop = threading.Event()
-
-    def on_message(pid, name):
-        def handler(message, _data):
-            if message.get("type") != "send":
-                log.write({"type": "agent-error", "pid": pid, "process": name,
-                           "error": message.get("description", str(message))})
-                return
-            payload = enrich(dict(message["payload"]))
-            payload.update({"type": "call", "pid": pid, "process": name})
-            log.write(payload)
-            if payload.get("api") not in ("ready",):
-                print(f"  {time.strftime('%H:%M:%S')} {name}: {summary_line(payload)}")
-        return handler
-
-    def attach(pid, name):
-        try:
-            session = device.attach(pid)
-            script = session.create_script(source)
-            script.on("message", on_message(pid, name))
-            script.load()
-            sessions[pid] = session
-            print(f"hooked {name} ({pid})")
-            log.write({"type": "attached", "pid": pid, "process": name})
-        except Exception as error:      # frida raises a family of its own
-            print(f"could not hook {name} ({pid}): {error}")
-            log.write({"type": "attach-failed", "pid": pid, "process": name,
-                       "error": str(error)})
-            sessions[pid] = None        # do not retry every scan
-
-    def scan_forever():
-        while not stop.is_set():
-            with lock:
-                if args.pid:
-                    wanted = [(pid, f"pid{pid}") for pid in args.pid]
-                else:
-                    wanted = [(p.pid, p.name)
-                              for p in target_processes(device, args.match, own_pid)]
-                for pid, name in wanted:
-                    if pid not in sessions:
-                        attach(pid, name)
-            stop.wait(args.rescan)
-
-    scanner = threading.Thread(target=scan_forever, daemon=True)
-    scanner.start()
-    time.sleep(1.0)
-    if not any(sessions.values()):
-        print("Nothing hooked yet. Is this an Administrator terminal, and is MyASUS"
-              " installed? Scanning continues.")
-    zenduo_re.run_markers(markers, args.scenario)
-    stop.set()
-    with lock:
-        for session in sessions.values():
-            if session is not None:
-                try:
-                    session.detach()
-                except Exception:
-                    pass
+    hooks = HookSession(frida, log, events, args.match, args.pid, args.all_ioctls,
+                        args.rescan)
+    hooks.start()
+    time.sleep(1.5)
+    print("hooked: " + (", ".join(hooks.hooked()) or "nothing yet. Is this an"
+                        " Administrator terminal, and is MyASUS installed?"
+                        " Scanning continues."))
+    print(f"each call goes to {events.path}")
+    zenduo_re.run_steps(markers, args.scenario,
+                        after_step=lambda _i: zenduo_re.count_summary(events.take_counts()))
+    hooks.stop()
     log.close()
+    events.close()
     print(f"written {out}")
     return 0
 

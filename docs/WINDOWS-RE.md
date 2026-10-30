@@ -105,6 +105,7 @@ Before any run, turn Windows Fast Startup off if you have not already:
 
 | Script | Answers | Changes anything? |
 |---|---|---|
+| `capture.py` | Runs the next four together in one window and walks a scenario: the one to use for recipes 1 and 2 | Enables and disables one Windows log |
 | `inventory.py` | Which ASUS services, drivers, packages, WMI classes and audio effects are installed, with versions and SHA-256 hashes | No |
 | `hook_asus.py` | Which ATK calls and HID reports the ASUS processes make, per action | No (it injects a read-only hook) |
 | `atk_query.py` | Which ATK device ids exist on this BIOS, and their current values | No (DSTS only) |
@@ -115,11 +116,31 @@ Before any run, turn Windows Fast Startup off if you have not already:
 | `speaker_response.py` | The speaker curve under Windows (and Linux), for fitting `lib/speaker_dsp.py` | No |
 | `analyze.py` | Merges everything into one timeline per marker, with Linux replays | No; runs on either OS |
 
-Each interactive tool takes `--scenario NAME` (`attach`, `keyboard`, `power`,
-`display`, `audio`; the steps are in `windows/zenduo_re.py`). It prints one
-step at a time. Press Enter *just before* you do the step, which writes a
-timestamped marker. Without `--scenario`, type your own label and press
-Enter. Type `q` to stop.
+Each interactive tool takes `--scenario NAME`: `keyboard-docked`,
+`keyboard-bluetooth`, `attach`, `power`, `display` or `audio`
+(`py capture.py --list-scenarios`; the steps are in `windows/zenduo_re.py`).
+It shows one step at a time in colour: a yellow `STEP n/N` bar, the action
+in cyan, a grey hint under it. Each step is one key press or one click, and
+says how many presses are left, for example "(backlight 2 of 4)".
+
+- **An action step** is marked the moment it appears. Do it, then press
+  Enter.
+- **A keyboard step** ("Put the keyboard on the lower screen", "Wait for the
+  keyboard to connect over Bluetooth") ends by itself once Windows sees the
+  keyboard that way. Press Enter if it does not notice.
+- **A hands-off step** counts down by itself. Touch nothing until it ends.
+
+`s` skips a step and `q` stops. After each step a green line says what was
+caught during it, for example `✓ caught: 1 HID write, 2 keyboard reports`.
+"caught: nothing" on a step that should have done something is worth a note
+in the issue. Every event goes to `events.log` in the session folder, not to
+the screen. To watch it live, run this in a second window:
+
+```powershell
+Get-Content captures\<session>\events.log -Wait
+```
+
+Without `--scenario`, type your own label and press Enter.
 
 ## Recipes
 
@@ -137,30 +158,47 @@ capture leaves a question open (see [Static analysis](#static-analysis-when-capt
 
 ### 1. Keyboard: handshake, backlight, Fn-lock, unknown keys
 
-Run three tools at once, each in its own Administrator window. Start them in
-this order and stop them in reverse:
+The keyboard is captured **twice**, once in each position, because the two
+links behave differently (docs/HARDWARE.md). Each run is one command in one
+Administrator window.
+
+**Run 1, keyboard docked** (on the lower screen, on its pins: USB):
 
 ```powershell
-py usb_capture.py
+py capture.py --scenario keyboard-docked
 ```
+
+**Run 2, keyboard detached** (off the screen, on the desk: Bluetooth):
 
 ```powershell
-py hid_probe.py listen
+py capture.py --scenario keyboard-bluetooth
 ```
 
-```powershell
-py hook_asus.py --scenario keyboard
-```
+Before step 1, `capture.py` lists what it started: the hooks in the ASUS
+processes, the HID listener, the USB capture (run 1 only) and the WMI
+trace. A red ✗ line says what is missing and how to fix it. The rest still
+runs. Open MyASUS before you start, or when that list asks for it.
 
-Walk the scenario in the `hook_asus` window. Then repeat with the keyboard
-**detached and paired over Bluetooth**, without `usb_capture.py`: use
-`hook_asus.py` and `hid_probe.py listen` only.
+Step 1 of each run puts the keyboard in place and waits until Windows sees
+it there. Every later step checks again. If the keyboard moves mid-run, for
+example if it slips off the pins, the step holds until it is back. The
+check reads the keyboard's ids (`0b05:1b2c` on USB, `0b05:1b2d` on
+Bluetooth) from Windows' device list. How Windows spells them there is
+**VERIFY-ON-HW**. If a keyboard step never ends although the keyboard is in
+place, press Enter, and mention it in the issue.
+Over Bluetooth there is no USB capture, because nothing crosses the pins.
+Bluetooth commands are covered by the hooks, since they go through the same
+`HidD_*` calls.
+
+The older per-tool commands (`hook_asus.py`, `hid_probe.py listen`,
+`usb_capture.py`) still work alone with the same `--scenario` names. They
+are for when one part misbehaves.
 
 Questions this answers:
 
 - Does Windows (or MyASUS) send the `ASUS Tech.Inc.` handshake, on which
   report ids, and the four OOBE reports that `kb_init.py` sends on a guess?
-  Use the `attach` scenario for this one.
+  Use the `attach` scenario for this one (`py capture.py --scenario attach`).
 - Is the backlight command the same `5a ba c5 c4 <level>` over Bluetooth? If
   Windows sends something else there, that explains the Bluetooth refusals
   in HARDWARE.md.
@@ -203,15 +241,11 @@ That names the device id and both values, which is often enough on its own.
 To see the calls themselves, and whether they go through ATKACPI or WMI:
 
 ```powershell
-py hook_asus.py --scenario power
+py capture.py --scenario power
 ```
 
-```powershell
-py wmi_trace.py --scenario power
-```
-
-Run the two in separate windows, both walking the same steps. `analyze.py`
-prints the Linux replay for every DEVS call. On Ubuntu:
+`timeline.txt` in the session folder then has the Linux replay for every
+DEVS call. On Ubuntu:
 
 ```bash
 echo 0x00110019 | sudo tee /sys/kernel/debug/asus-nb-wmi/dev_id
@@ -287,11 +321,16 @@ result worth much more than the internal DMIC does.
 
 ### 5. Read it all on Linux
 
-Copy `windows\captures\` to the Ubuntu side (USB stick, cloud folder), then:
+`capture.py` already writes `timeline.txt` (the `analyze.py` output) into
+each session folder, on Windows. To read one or more sessions again, copy
+`windows\captures\` to the Ubuntu side (USB stick, cloud folder), then:
 
 ```bash
-python3 windows/analyze.py --quiet-opens windows/captures/*-hooks windows/captures/*-usb windows/captures/*-hid-listen
+python3 windows/analyze.py --quiet-opens windows/captures/*-capture-*
 ```
+
+Folders from the single tools (`*-hooks`, `*-usb`, `*-hid-listen`, `*-wmi`)
+can be given together; their events are merged by time.
 
 Use `--json timeline.json` to get a machine-readable copy for an issue.
 
@@ -301,11 +340,11 @@ What is known, what the kit assumes, and how sure that is.
 
 | # | Topic | Status today | How the kit settles it | Residual gap |
 |---|---|---|---|---|
-| 1 | Keyboard handshake on attach | Linux copies hid-asus and **guesses** the OOBE sequence (`kb_init.py`) | `usb_capture` + `hook_asus`, `attach` | None if the capture is clean |
-| 2 | Backlight over Bluetooth | Same bytes as USB, refusals logged (HARDWARE.md) | `hook_asus` detached | On-air answers need BTVS |
-| 3 | Backlight idle timeout | Linux does it in `watch-fn` | `hook_asus`, keyboard scenario | None |
+| 1 | Keyboard handshake on attach | Linux copies hid-asus and **guesses** the OOBE sequence (`kb_init.py`) | `capture.py`, `attach` | None if the capture is clean |
+| 2 | Backlight over Bluetooth | Same bytes as USB, refusals logged (HARDWARE.md) | `capture.py`, `keyboard-bluetooth` | On-air answers need BTVS |
+| 3 | Backlight idle timeout | Linux does it in `watch-fn` | `capture.py`, both keyboard scenarios (a 90 s hands-off step) | None |
 | 4 | Fn-lock | Code `4e` seen, state not set (PLAN Q) | `hook_asus` + `atk_query` diff | If it is keyboard firmware alone, nothing to send |
-| 5 | Codes `7c`, `7e`, `86`, `3d` | Mapped from hid-asus, unconfirmed | `hid_probe listen` + scenario | Meaning of `3d`'s bytes: **GUESS** |
+| 5 | Codes `7c`, `7e`, `86`, `3d` | Mapped from hid-asus, unconfirmed | `capture.py`, both keyboard scenarios | Meaning of `3d`'s bytes: **GUESS** |
 | 6 | Fan profiles | `platform_profile` present, unwired (PLAN T) | `atk_query` diff, `hook_asus` | Fan curves set by a driver straight to the EC are invisible: see below |
 | 7 | Battery modes | `charge_control_end_threshold` works | `atk_query` diff | Whether MyASUS re-sends at each boot (hooks attach too late to see it) |
 | 8 | Speaker voicing | Fitted by ear and DMIC shape (`speaker_dsp.py`) | `speaker_response` | Mic colour; APO is level-dependent, so the curve is a slice |

@@ -8,7 +8,8 @@ functions without a Windows machine.
 What lives here:
   * the capture session folder and its marker log (what the user said they
     were about to do, with a timestamp, so every trace can be cut by action);
-  * the guided scenarios: which MyASUS toggles to flip, in which order;
+  * the guided scenarios (which key to press or MyASUS switch to click, in
+    which order) and the coloured step runner that walks them;
   * decoders for the two channels the ASUS software talks to the hardware on:
     the ATKACPI driver (DSTS/DEVS calls into the BIOS) and HID feature reports
     to the keyboard.
@@ -18,11 +19,13 @@ on Windows yet: the tables are what Linux and other projects already know,
 and the captures are how to confirm or correct them.
 """
 
+import collections
 import datetime
 import json
 import os
 import struct
 import sys
+import threading
 import time
 
 # ── ATKACPI (the ASUS ACPI driver's device, \\.\ATKACPI) ─────────────────────
@@ -264,19 +267,72 @@ def session_dir(tool, base=None, stamp=None):
 
 
 class JsonLog:
-    """Append-only JSON lines, flushed per line so a crash loses nothing."""
+    """Append-only JSON lines, flushed per line so a crash loses nothing.
+
+    Several capture threads write to one log, hence the lock.
+    """
 
     def __init__(self, path):
         self.path = path
         self._file = open(path, "a", encoding="utf-8")
+        self._lock = threading.Lock()
 
     def write(self, record):
         record.setdefault("ts", time.time())
-        self._file.write(json.dumps(record, sort_keys=True) + "\n")
-        self._file.flush()
+        with self._lock:
+            if self._file.closed:       # a capture thread outliving the run
+                return
+            self._file.write(json.dumps(record, sort_keys=True) + "\n")
+            self._file.flush()
 
     def close(self):
-        self._file.close()
+        with self._lock:
+            self._file.close()
+
+
+class EventLog:
+    """events.log: one readable line per captured event, kept off the screen.
+
+    The screen shows the steps; this file has the detail (follow it live with
+    `Get-Content events.log -Wait` in a second window, if wanted). It also
+    counts events by kind, so each step can end with what it caught.
+    """
+
+    def __init__(self, path):
+        self.path = path
+        self._file = open(path, "a", encoding="utf-8")
+        self._lock = threading.Lock()
+        self._step = collections.Counter()
+        self.total = collections.Counter()
+
+    def add(self, kind, text):
+        """Log one line; kind is what to count it as, or None for a note."""
+        with self._lock:
+            if self._file.closed:
+                return
+            self._file.write(f"{time.strftime('%H:%M:%S')} {text}\n")
+            self._file.flush()
+            if kind:
+                self._step[kind] += 1
+                self.total[kind] += 1
+
+    def take_counts(self):
+        """The counts since the last call."""
+        with self._lock:
+            counts, self._step = self._step, collections.Counter()
+        return counts
+
+    def close(self):
+        with self._lock:
+            self._file.close()
+
+
+def count_summary(counts):
+    """'2 ATK calls, 1 HID write' from a Counter of kinds (singular names)."""
+    if not counts:
+        return "nothing captured"
+    return ", ".join(f"{n} {kind}{'' if n == 1 else 's'}"
+                     for kind, n in sorted(counts.items(), key=lambda kv: -kv[1]))
 
 
 def read_jsonl(path):
@@ -292,149 +348,475 @@ def read_jsonl(path):
     return records
 
 
-# Each step names one thing to do in MyASUS (or on the keyboard), so a capture
-# holds one change per marker. Order matters: undo each change in the next
-# step so the machine ends as it started. Labels that say "(USB)" or "(BT)"
-# need the keyboard docked or detached and paired.
+# ── Guided scenarios ─────────────────────────────────────────────────────────
+# Each step names one thing to do, so a capture holds one change per marker,
+# and undoes it in a later step so the machine ends as it started. A step is
+# one of three kinds:
+#   * an action: the marker is written when the step is shown, the user does
+#     it and presses Enter;
+#   * a keyboard state (needs=...): it ends by itself once Windows sees the
+#     keyboard in that state (when the tool can tell), or on Enter;
+#   * a hands-off wait (wait=seconds): a countdown, nothing to press.
+# Menu names are as MyASUS 4.0.81.0 shows them (screenshots, 2026-10-30): all
+# under MyASUS > Device Settings, whose "tabs" only scroll one long page.
+
+Step = collections.namedtuple("Step", "do hint needs wait")
+
+
+def step(do, hint="", needs=None, wait=0):
+    return Step(do, hint, needs, wait)
+
+
+# What each needs= value asks of the keyboard, as the screen says it.
+KEYBOARD_STATES = {
+    "docked": "DOCKED: lying on the lower screen, on its pins (USB)",
+    "off-dock": "OFF the lower screen",
+    "bluetooth": "OFF the lower screen and CONNECTED over Bluetooth",
+}
+
+OPEN_INPUT_SETTINGS = step(
+    "Open MyASUS, click Device Settings on the left, then click 'Input Device"
+    " Settings' in the row along the top.",
+    "That row only scrolls the page: every setting below is on the same page.")
+HANDS_OFF_BASELINE = step("Hands off: touch nothing.", wait=10)
+PAIRING_HINT = (
+    "Usually a few seconds after lifting it. If it never connects, slide the"
+    " switch on the keyboard's left edge on. Never paired with Windows? Hold F10"
+    " for 4-5 s until its light flashes blue, then Settings > Bluetooth &"
+    " devices > Add device.")
+
+
+def _keyboard_steps(transport):
+    """The keyboard run, the same over USB and Bluetooth except where noted."""
+    if transport == "docked":
+        start = [step("Put the keyboard on the lower screen so it snaps onto its"
+                      " pins. Leave it there until this run ends.",
+                      "This step ends by itself once Windows sees the keyboard"
+                      " on USB.", needs="docked")]
+    else:
+        start = [step("Lift the keyboard off the lower screen and put it on the"
+                      " desk. Leave it off until this run ends.", needs="off-dock"),
+                 step("Wait for the keyboard to connect over Bluetooth.",
+                      PAIRING_HINT, needs="bluetooth")]
+    steps = start + [
+        HANDS_OFF_BASELINE,
+        step("Press F4 once, without Fn. (backlight 1 of 4)",
+             "F4 has the keyboard-backlight icon; the light goes up one level."
+             " If nothing changes, hold Fn while pressing F4 here and in every"
+             " F-key step below."),
+        step("Press F4 once. (backlight 2 of 4)"),
+        step("Press F4 once. (backlight 3 of 4)"),
+        step("Press F4 once. (backlight 4 of 4)",
+             "If the backlight is not off now, press F4 until it is, then Enter."),
+        step("Hold Fn, press Esc once, let go of both. (Fn-lock 1 of 2)",
+             "This swaps what the bare F-keys do."),
+        step("Hold Fn, press Esc once more, let go. (Fn-lock 2 of 2, back as"
+             " it was)"),
+        step("Press F8 once.",
+             "If it opens anything, close it before pressing Enter."),
+        step("Press F9 twice, about a second apart.",
+             "Probably microphone mute: two presses leave it as it was."),
+        step("Press F11 once.",
+             "If a panel opens (emoji picker?), close it with Esc, then Enter."),
+        step("Press F12 once.",
+             "The MyASUS key: MyASUS opening or coming to the front is expected."),
+        step("Press the second-screen key once. (1 of 2)",
+             "The key just left of PrtSc, with a two-screen icon."),
+        step("Press the second-screen key once more. (2 of 2, back as it was)",
+             "Wait until both screens show the desktop again, then Enter."),
+        OPEN_INPUT_SETTINGS,
+        step("Touchpad: click its switch once, so it reads Lock.",
+             "The touchpad stops working until the next step; use the touch"
+             " screen to click."),
+        step("Touchpad: click its switch again, so it reads Unlock."),
+        step("Function key: click the option that is NOT selected now ('Locked"
+             " Fn key' or 'Normal Fn key')."),
+        step("Function key: click the option that was selected before."),
+        step("Automatic keyboard backlight: click the Auto-brighten switch once."),
+        step("Auto-brighten: click its switch again (back as it was)."),
+        step("Automatic keyboard backlight: click the Auto-dim switch once."),
+        step("Auto-dim: click its switch again (back as it was)."),
+    ]
+    if transport == "bluetooth":
+        steps += [
+            step("Automatic keyboard backlight: click the Smart Switch switch once.",
+                 "Smart Switch turns the backlight off over Bluetooth."),
+            step("Smart Switch: click its switch again (back as it was)."),
+        ]
+    steps += [
+        step("Press F4 until the keyboard backlight is at its brightest."),
+        step("Cover the light sensor with a fingertip for 10 s, then uncover it.",
+             "GUESS: the sensor is in the bezel above the top screen, next to"
+             " the camera. Press Enter after uncovering it."),
+        step("Keyboard backlight sleep mode: in the drop-down pick 'While on"
+             " battery or on AC power', and pick the shortest time offered.",
+             "Note both old values first: a later step puts them back."),
+        step("Hands off the keyboard and the touchpad until the countdown ends.",
+             "The backlight should go off by itself when the time runs out."
+             " If the shortest time offered is over 1 minute, press s to skip.",
+             wait=90),
+        step("Keyboard backlight sleep mode: put both values back as they were."),
+    ]
+    if transport == "bluetooth":
+        steps.append(step(
+            "Open Windows Settings > Bluetooth & devices and note the keyboard's"
+            " battery percentage.",
+            "Write it down for the report: it may explain the 3d status code."))
+    steps.append(step("Hands off: touch nothing until the countdown ends.",
+                      "The keyboard sends a status report (code 3d) now and then;"
+                      " this waits for one.", wait=60))
+    return steps
+
+
+def _setting_pair(where, what, hint=""):
+    """Flip a two-state setting, then flip it back: two steps."""
+    return [step(f"{where}: click the {what} switch once.", hint),
+            step(f"{where}: click the {what} switch again (back as it was).")]
+
+
 SCENARIOS = {
-    "attach": [
-        "baseline: touch nothing for 10 s",
-        "(USB) dock the keyboard and wait 10 s",
-        "(USB) undock the keyboard and wait 10 s",
-        "(BT) turn the keyboard's Bluetooth on and wait until it connects",
-        "(BT) dock again and wait 10 s",
-        "sleep the laptop (Start > Power > Sleep), wake it, wait 10 s",
-    ],
-    "keyboard": [
-        "baseline: touch nothing for 10 s",
-        "press the backlight key (F4) once, wait 3 s",
-        "press the backlight key (F4) once, wait 3 s",
-        "press the backlight key (F4) once, wait 3 s",
-        "press the backlight key (F4) until it is off",
-        # Menu names read from MyASUS 4.0.81.0 screenshots, 2026-10-30.
-        "MyASUS > Device Settings > Input Device Settings > Touchpad: switch"
-        " it to Lock",
-        "Touchpad: switch it back to Unlock",
-        "MyASUS > Device Settings > Input Device Settings > Keyboard backlight"
-        " sleep mode: pick 'While on battery or on AC power' and a different"
-        " idle time",
-        "same place: put the sleep mode and idle time back as they were",
-        "same tab, Automatic keyboard backlight: switch Smart Switch (light off"
-        " over Bluetooth) to its other state",
-        "same place: switch Smart Switch back",
-        "same place: switch Auto-brighten to its other state",
-        "same place: switch Auto-brighten back",
-        "same place: switch Auto-dim to its other state",
-        "same place: switch Auto-dim back",
-        "cover the light sensor (probably next to the camera above the top screen)"
-        " with a finger for 10 s, then uncover it (Auto-brighten/Auto-dim at work)",
-        "press Fn+Esc (Fn-lock) once",
-        "press Fn+Esc (Fn-lock) again",
-        "same tab, Function key: switch between 'Locked Fn key' and 'Normal Fn"
-        " key'",
-        "same place: switch the Function key setting back",
-        "press F9 once",
-        "press F11 once",
-        "press F12 (MyASUS key) once",
-        "press the second-screen key (left of PrtSc) once",
-        "press the second-screen key again",
-        "leave the keyboard alone for 60 s (status reports 0x3d)",
-    ],
-    # Names below as MyASUS 4.0.81.0 shows them (screenshots, 2026-10-30);
-    # all under MyASUS > Device Settings, whose "tabs" are scroll anchors.
-    "power": [
-        "baseline: plugged in, touch nothing for 10 s",
-        "Power & Performance > Fan Profile: pick Whisper mode",
-        "Fan Profile: pick Performance mode (needs the charger plugged in)",
-        "Fan Profile: pick Standard mode",
-        "press Fn+F once (cycles the fan profile), wait 3 s",
-        "press Fn+F until MyASUS shows Standard mode again",
-        "Battery Care Mode: switch the 'Battery Care Mode' toggle to its other"
-        " state",
-        "Battery Care Mode: switch it back",
-        "Battery Care Mode: switch 'Instant Full-Charge Mode' on",
-        "Battery Care Mode: switch 'Instant Full-Charge Mode' off",
-        "Sleep Assistant: switch it to its other state",
-        "Sleep Assistant: switch it back",
-        "Windows Settings > System > Power: set Power mode to Best power efficiency",
-        "Windows Settings > System > Power: set Power mode to Best performance",
-        "Windows Settings > System > Power: set Power mode back to Balanced",
-    ],
-    "display": [
-        "baseline: touch nothing for 10 s",
-        "Audio & Visual > Display refresh rate: pick Fixed refresh rate, 60 Hz"
-        " on Panel 1",
-        "Display refresh rate: put it back (Adaptive, or what you had)",
-        "ASUS OLED Care: switch Pixel refresh to its other state",
-        "ASUS OLED Care: switch Pixel refresh back",
-        "OLED Flicker-Free Dimming, Panel 1: drag the slider to 50",
-        "OLED Flicker-Free Dimming, Panel 1: drag it back to where it was",
-        "OLED Flicker-Free Dimming: pick Panel 2, drag the slider to 50",
-        "OLED Flicker-Free Dimming, Panel 2: drag it back to where it was",
-        "Splendid, Panel 1: pick Vivid",
-        "Splendid, Panel 1: pick Eye Care",
-        "Splendid, Panel 1: pick E-Reading",
-        "Splendid, Panel 1: pick Manual and move the slider",
-        "Splendid, Panel 1: pick Normal (or what you had)",
-        "Splendid: pick a different Color Gamut",
-        "Splendid: put Color Gamut back",
-        "Target Mode: switch it on",
-        "Target Mode: switch it off",
-        "Tru2Life: switch it to its other state",
-        "Tru2Life: switch it back",
-    ],
-    "audio": [
-        "baseline: touch nothing for 10 s",
-        "Audio & Visual > Sound Modes: pick Dynamic",
-        "Sound Modes: pick Music",
-        "Sound Modes: pick Voice",
-        "Sound Modes: pick the mode you had before",
-        "Volume Booster: switch it on",
-        "Volume Booster: switch it off",
-        "AI Noise-Canceling Speaker: switch it on",
-        "AI Noise-Canceling Speaker: switch it off",
-        "AI Noise-Canceling Microphone: pick Authentic Recording (AI off)",
-        "AI Noise-Canceling Microphone: pick Single-presenter Mode",
-        "AI Noise-Canceling Microphone: pick the mode you had before",
-    ],
+    "keyboard-docked": {
+        "title": "Keyboard over USB (docked)",
+        "keyboard": "docked",
+        "steps": _keyboard_steps("docked"),
+    },
+    "keyboard-bluetooth": {
+        "title": "Keyboard over Bluetooth (detached)",
+        "keyboard": "bluetooth",
+        "steps": _keyboard_steps("bluetooth"),
+    },
+    "attach": {
+        "title": "Docking, undocking, Bluetooth and sleep",
+        "keyboard": None,
+        "steps": [
+            step("Put the keyboard on the lower screen so it snaps onto its pins.",
+                 needs="docked"),
+            HANDS_OFF_BASELINE,
+            step("Lift the keyboard off the lower screen and put it on the desk.",
+                 needs="off-dock"),
+            step("Wait for the keyboard to connect over Bluetooth.", PAIRING_HINT,
+                 needs="bluetooth"),
+            HANDS_OFF_BASELINE,
+            step("Put the keyboard back on the lower screen.", needs="docked"),
+            HANDS_OFF_BASELINE,
+            step("Sleep the laptop: Start > Power > Sleep. 10 s after the screens"
+                 " go dark, press the power button, sign in, then press Enter.",
+                 "This window keeps counting after the wake; that is fine."),
+            HANDS_OFF_BASELINE,
+        ],
+    },
+    "power": {
+        "title": "Fan profile, battery care, sleep assistant, power mode",
+        "keyboard": None,
+        "steps": [
+            step("Plug the charger in and leave it in for this run.",
+                 "Performance mode is offered only on the charger."),
+            step("Open MyASUS, click Device Settings on the left, then click"
+                 " 'Power & Performance' in the row along the top."),
+            HANDS_OFF_BASELINE,
+            step("Fan Profile: click Whisper mode."),
+            step("Fan Profile: click Performance mode."),
+            step("Fan Profile: click Standard mode."),
+            step("Hold Fn, press F once, let go of both. (fan 1 of 3)",
+                 "A pop-up or MyASUS shows the new fan profile."),
+            step("Hold Fn, press F once. (fan 2 of 3)"),
+            step("Hold Fn, press F once. (fan 3 of 3)",
+                 "That should be Standard again. If MyASUS shows another mode,"
+                 " click Standard mode, then Enter."),
+            *_setting_pair("Battery Care Mode", "'Battery Care Mode'"),
+            step("Battery Care Mode: click the 'Instant Full-Charge Mode' switch"
+                 " so it is on."),
+            step("Battery Care Mode: click the 'Instant Full-Charge Mode' switch"
+                 " so it is off."),
+            *_setting_pair("Sleep Assistant", "Sleep Assistant"),
+            step("Windows Settings > System > Power & battery > Power mode: pick"
+                 " Best power efficiency."),
+            step("Power mode: pick Best performance."),
+            step("Power mode: pick Balanced (or what you had)."),
+        ],
+    },
+    "display": {
+        "title": "Refresh rate, OLED care, dimming, Splendid",
+        "keyboard": None,
+        "steps": [
+            step("Open MyASUS, click Device Settings on the left, then click"
+                 " 'Audio & Visual' in the row along the top."),
+            HANDS_OFF_BASELINE,
+            step("Display refresh rate: pick Fixed refresh rate, 60 Hz, on Panel 1."),
+            step("Display refresh rate: put Panel 1 back (Adaptive, or what you had)."),
+            *_setting_pair("ASUS OLED Care", "Pixel refresh"),
+            step("OLED Flicker-Free Dimming, Panel 1: drag the slider to 50.",
+                 "Note where it was first."),
+            step("OLED Flicker-Free Dimming, Panel 1: drag it back to where it was."),
+            step("OLED Flicker-Free Dimming: pick Panel 2, drag the slider to 50."),
+            step("OLED Flicker-Free Dimming, Panel 2: drag it back to where it was."),
+            step("Splendid, Panel 1: click Vivid."),
+            step("Splendid, Panel 1: click Eye Care."),
+            step("Splendid, Panel 1: click E-Reading."),
+            step("Splendid, Panel 1: click Manual and move its slider once."),
+            step("Splendid, Panel 1: click Normal (or what you had)."),
+            step("Splendid: pick a different Color Gamut.", "Note the old one first."),
+            step("Splendid: put Color Gamut back."),
+            step("Target Mode: switch it on."),
+            step("Target Mode: switch it off."),
+            *_setting_pair("Tru2Life", "Tru2Life"),
+        ],
+    },
+    "audio": {
+        "title": "Sound modes, volume booster, AI noise canceling",
+        "keyboard": None,
+        "steps": [
+            step("Open MyASUS, click Device Settings on the left, then click"
+                 " 'Audio & Visual' in the row along the top.",
+                 "Note the current Sound Mode and microphone mode first."),
+            HANDS_OFF_BASELINE,
+            step("Sound Modes: click Dynamic."),
+            step("Sound Modes: click Music."),
+            step("Sound Modes: click Voice."),
+            step("Sound Modes: click the mode you had before."),
+            step("Volume Booster: switch it on."),
+            step("Volume Booster: switch it off."),
+            step("AI Noise-Canceling Speaker: switch it on."),
+            step("AI Noise-Canceling Speaker: switch it off."),
+            step("AI Noise-Canceling Microphone: click Authentic Recording (AI off)."),
+            step("AI Noise-Canceling Microphone: click Single-presenter Mode."),
+            step("AI Noise-Canceling Microphone: click the mode you had before."),
+        ],
+    },
 }
 
 
-def run_markers(log, scenario=None, out=sys.stdout, inp=sys.stdin):
-    """Record markers until the user types q. Returns how many were written.
+# ── The step runner ──────────────────────────────────────────────────────────
 
-    With a scenario, each step is printed and Enter marks "about to do it";
-    `s` skips a step. Without one, whatever the user types is the label.
+class Paint:
+    """ANSI colour, on only for a console that shows it (and not NO_COLOR)."""
+
+    CODES = {"step": "30;43;1", "do": "96;1", "hint": "37", "ok": "92",
+             "warn": "91;1", "info": "90", "keys": "93"}
+
+    def __init__(self, out):
+        self.on = (hasattr(out, "isatty") and out.isatty()
+                   and "NO_COLOR" not in os.environ and _enable_vt())
+
+    def __call__(self, kind, text):
+        return f"\x1b[{self.CODES[kind]}m{text}\x1b[0m" if self.on else text
+
+
+def _enable_vt():
+    """Turn on escape-code handling in a Windows console (on by default elsewhere)."""
+    if os.name != "nt":
+        return True
+    try:
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.GetStdHandle(-11)                 # STD_OUTPUT_HANDLE
+        mode = ctypes.c_uint32()
+        if not kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+            return False
+        # ENABLE_VIRTUAL_TERMINAL_PROCESSING (wincon.h)
+        return bool(kernel32.SetConsoleMode(handle, mode.value | 0x0004))
+    except (AttributeError, OSError):
+        return False
+
+
+class ConsoleKeys:
+    """Single key presses, with a timeout, from the console.
+
+    get() returns "enter", a lower-case character, or None when nothing was
+    pressed in time. Windows reads keys as they are pressed (msvcrt); other
+    systems read whole lines, so a letter needs Enter after it there.
     """
-    written = 0
-    steps = SCENARIOS.get(scenario, []) if scenario else []
-    log.write({"type": "marker", "label": "capture started"})
-    if steps:
-        print(f"Scenario '{scenario}': {len(steps)} steps. Enter = about to do"
-              " the step, s = skip, q = stop.", file=out)
-        for index, step in enumerate(steps, 1):
-            print(f"\n[{index}/{len(steps)}] {step}", file=out)
-            answer = inp.readline()
-            if not answer or answer.strip().lower() == "q":
+
+    def __init__(self, stream=None):
+        self.stream = stream or sys.stdin
+
+    def get(self, timeout=None):
+        if os.name == "nt":
+            import msvcrt
+            deadline = None if timeout is None else time.monotonic() + timeout
+            while True:
+                if msvcrt.kbhit():
+                    char = msvcrt.getwch()
+                    if char in ("\x00", "\xe0"):        # arrows, F-keys: two codes
+                        msvcrt.getwch()
+                        continue
+                    if char == "\x03":
+                        raise KeyboardInterrupt
+                    return "enter" if char in "\r\n" else char.lower()
+                if deadline is not None and time.monotonic() >= deadline:
+                    return None
+                time.sleep(0.05)
+        if timeout is not None:
+            import select
+            if not select.select([self.stream], [], [], timeout)[0]:
+                return None
+        line = self.stream.readline()
+        if not line:
+            return "q"
+        line = line.strip().lower()
+        return line[:1] if line else "enter"
+
+    def line(self):
+        return self.stream.readline()
+
+
+def run_steps(log, scenario=None, keys=None, out=None, detect=None, after_step=None):
+    """Walk a scenario, writing one marker per step. Returns the steps done.
+
+    detect() names the keyboard's state ("docked", "bluetooth", "none") or
+    returns None when it cannot tell; with it, keyboard-state steps end by
+    themselves. after_step(index) is called when a step ends and may return a
+    line to show (what was captured during it). Without a scenario, whatever
+    the user types is the label. The keys are Enter (done), s (skip), q (stop).
+    """
+    out = out or sys.stdout
+    keys = keys or ConsoleKeys()
+    paint = Paint(out)
+    log.write({"type": "marker", "label": "capture started", "scenario": scenario})
+    done = 0
+    if not scenario:
+        print(paint("do", "Type what you are about to do and press Enter (q to stop)."),
+              file=out)
+        while True:
+            label = keys.line()
+            if not label or label.strip().lower() == "q":
                 break
-            if answer.strip().lower() == "s":
-                continue
-            log.write({"type": "marker", "label": step, "step": index})
-            written += 1
-            print("   marked; do it now, then press Enter for the next step.", file=out)
-        print("\nScenario done. Press Enter to stop the capture.", file=out)
-        inp.readline()
-    else:
-        print("Type what you are about to do and press Enter (q to stop).", file=out)
-        for line in inp:
-            label = line.strip()
-            if label.lower() == "q":
-                break
-            if label:
-                log.write({"type": "marker", "label": label})
-                written += 1
+            if label.strip():
+                log.write({"type": "marker", "label": label.strip()})
+                done += 1
+        log.write({"type": "marker", "label": "capture stopped"})
+        return done
+
+    plan = SCENARIOS[scenario]
+    steps = plan["steps"]
+    print(paint("step", f" {plan['title']}: {len(steps)} steps "), file=out)
+    if plan["keyboard"]:
+        print(paint("warn", "For this whole run the keyboard must be "
+                    f"{KEYBOARD_STATES[plan['keyboard']]}."), file=out)
+    print(paint("keys", "Keys: Enter = step done · s = skip step · q = stop"), file=out)
+    for index, current in enumerate(steps, 1):
+        tag = f"  [keyboard: {plan['keyboard']}]" if plan["keyboard"] else ""
+        print("\n" + paint("step", f" STEP {index}/{len(steps)} ") + paint("info", tag),
+              file=out)
+        print("  " + paint("do", current.do), file=out)
+        if current.hint:
+            print("  " + paint("hint", current.hint), file=out)
+        log.write({"type": "marker", "label": current.do, "step": index,
+                   "scenario": scenario})
+        if current.needs:
+            outcome = _wait_for_state(current.needs, keys, out, paint, detect)
+        elif plan["keyboard"] and detect and not _state_matches(
+                plan["keyboard"], detect() or plan["keyboard"]):
+            # The keyboard moved mid-run: hold this step until it is back.
+            print("  " + paint("warn", "The keyboard is not where this run needs it."),
+                  file=out)
+            outcome = _wait_for_state(plan["keyboard"], keys, out, paint, detect)
+            if outcome == "enter":
+                outcome = _action(current, keys, out, paint)
+        else:
+            outcome = _action(current, keys, out, paint)
+        if outcome == "q":
+            break
+        if outcome == "s":
+            log.write({"type": "marker", "label": f"skipped: {current.do}",
+                       "step": index, "skipped": True, "scenario": scenario})
+            print("  " + paint("info", "skipped"), file=out)
+            continue
+        done += 1
+        summary = after_step(index) if after_step else None
+        print("  " + paint("ok", "✓ " + (summary or "done")), file=out)
+    print("\n" + paint("step", " Scenario finished "), file=out)
     log.write({"type": "marker", "label": "capture stopped"})
-    return written
+    return done
+
+
+def _action(current, keys, out, paint):
+    """A step the user does: a hands-off countdown, or Enter when done."""
+    if current.wait:
+        return _countdown(current.wait, keys, out, paint)
+    print("  " + paint("keys", "Enter when done"), file=out, end="", flush=True)
+    key = _until_key(keys)
+    print(file=out)
+    return key
+
+
+def _until_key(keys):
+    while True:
+        key = keys.get()
+        if key in ("enter", "s", "q"):
+            return key
+
+
+def _countdown(seconds, keys, out, paint):
+    """A hands-off wait. Enter ends it early, s skips it, q stops."""
+    for remaining in range(seconds, 0, -1):
+        print("\r  " + paint("keys", f"hands off: {remaining:>3} s left "), file=out,
+              end="", flush=True)
+        key = keys.get(1.0)
+        if key in ("enter", "s", "q"):
+            print(file=out)
+            return key
+    print(file=out)
+    return "enter"
+
+
+def _wait_for_state(needs, keys, out, paint, detect):
+    """Until the keyboard is in the state the step asks for, or Enter."""
+    want = KEYBOARD_STATES[needs]
+    if detect is None:
+        print("  " + paint("keys", f"Enter once the keyboard is {want}"), file=out,
+              end="", flush=True)
+        key = _until_key(keys)
+        print(file=out)
+        return key
+    shown = False
+    while True:
+        state = detect()
+        if state is not None and _state_matches(needs, state):
+            print(("\n" if shown else "") + "  " + paint("ok", f"seen: keyboard {state}"),
+                  file=out)
+            return "enter"
+        if not shown:
+            seen = state or "unknown"
+            print("  " + paint("warn", f"Waiting for the keyboard to be {want}")
+                  + paint("info", f" (now: {seen}; Enter if it already is)"),
+                  file=out, end="", flush=True)
+            shown = True
+        key = keys.get(1.0)
+        if key in ("enter", "s", "q"):
+            print(file=out)
+            return key
+
+
+def _state_matches(needs, state):
+    if needs == "off-dock":
+        return state != "docked"
+    return state == needs
+
+
+def keyboard_transport(paths):
+    """'docked', 'bluetooth' or 'none', from the HID interface paths Windows lists.
+
+    The ids are from docs/HARDWARE.md: 0b05:1b2c on the pogo pins (USB),
+    0b05:1b2d over Bluetooth. How Windows spells them in a path is read from
+    the Windows HID enumerator naming (USB: "vid_0b05&pid_1b2c"; Bluetooth:
+    "..._vid&00020b05_pid&1b2d..." after the HID service GUID); that this
+    keyboard's paths look so is VERIFY-ON-HW, which is why every keyboard
+    step also ends on Enter.
+    """
+    lowered = [p.lower() for p in paths]
+    if any("vid_0b05&pid_1b2c" in p for p in lowered):
+        return "docked"
+    if any("0b05_pid&1b2d" in p or "pid_1b2d" in p
+           or (is_bluetooth_path(p) and "0b05" in p) for p in lowered):
+        return "bluetooth"
+    return "none"
+
+
+def is_bluetooth_path(path):
+    """A HID path under the Bluetooth HID (Classic) or HOGP (LE) service."""
+    path = path.lower()
+    return "{00001124-" in path or "{00001812-" in path
 
 
 def label_for(ts, markers):

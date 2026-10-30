@@ -10,6 +10,11 @@
   that into Linux equivalents. Read only, apart from one guarded test command.
   docs/WINDOWS-RE.md is the guide and lists what is still guesswork. Not yet
   run on Windows
+- `py capture.py --scenario keyboard-docked` runs all of it in one window and
+  walks the steps in colour, one key press or click each, with the event
+  stream in `events.log` instead of on screen. The keyboard is captured in
+  two runs, docked and on Bluetooth, and each step waits until Windows sees
+  the keyboard in the right place
 
 ### The keyboard light goes dark when you stop typing on Bluetooth
 

@@ -4,9 +4,10 @@ r"""Look at the ASUS HID devices from Windows, the way Windows sees them.
                                        page, report lengths, declared report ids
     py hid_probe.py read-feature 5a    GET_FEATURE on that report id, on every
                                        collection that declares it
-    py hid_probe.py listen [--scenario keyboard]
+    py hid_probe.py listen [--scenario keyboard-docked]
                                        log input reports from the vendor
                                        collections (0xff31 etc.) with markers
+                                       (capture.py does this and more)
     py hid_probe.py send 5a ba c5 c4 01 --yes
                                        one SET_FEATURE, to test a hypothesis
 
@@ -29,6 +30,7 @@ and mouse collections exclusively, so only the vendor collections can be read.
 
 import argparse
 import ctypes
+import functools
 import os
 import sys
 import threading
@@ -84,6 +86,7 @@ class HIDP_CAPS(ctypes.Structure):
                 ("NumberFeatureDataIndices", wintypes.USHORT)]
 
 
+@functools.lru_cache(maxsize=None)     # the scans call it every few seconds
 def load_dlls():
     hid = ctypes.WinDLL("hid.dll")
     setupapi = ctypes.WinDLL("setupapi.dll", use_last_error=True)
@@ -201,7 +204,7 @@ def collections(vendor_only=True):
             entry = {"path": path, "vid": f"{attrs.VendorID:04x}",
                      "pid": f"{attrs.ProductID:04x}", "version": f"{attrs.VersionNumber:04x}",
                      "product": name.value, "writable": writable,
-                     "bluetooth": "{00001124-" in path.lower()}
+                     "bluetooth": zenduo_re.is_bluetooth_path(path)}
             preparsed = ctypes.c_void_p()
             if hid.HidD_GetPreparsedData(handle, ctypes.byref(preparsed)):
                 caps = HIDP_CAPS()
@@ -277,47 +280,113 @@ def cmd_read_feature(args):
     return 0 if hits else 1
 
 
-def cmd_listen(args):
-    _hid, _setupapi, kernel32 = load_dlls()
-    targets = [e for e in collections()
-               if e.get("usage_page", "0x0000") >= "0xff00" or args.every_collection]
-    if not targets:
-        print("No vendor-defined ASUS collections to read.")
-        return 1
-    out = zenduo_re.session_dir("hid-listen", args.out)
-    log = zenduo_re.JsonLog(os.path.join(out, "hid-input.jsonl"))
-    markers = zenduo_re.JsonLog(os.path.join(out, "markers.jsonl"))
-    stop = threading.Event()
+def present_paths():
+    """Every HID interface path Windows lists now (cheap: opens nothing)."""
+    hid, setupapi, _kernel32 = load_dlls()
+    return interface_paths(hid, setupapi)
 
-    def reader(entry):
-        handle, _ = open_path(kernel32, entry["path"], write=False)
+
+def is_vendor(entry):
+    return entry.get("usage_page", "0x0000") >= "0xff00"
+
+
+class HidListener:
+    """Reads input reports from the ASUS vendor collections until stop().
+
+    The keyboard comes and goes (dock, undock, Bluetooth), so the collections
+    are looked for again every `rescan` seconds; a reader ends when ReadFile
+    fails, which is what removing the device does. Reports go to `log`
+    (hid-input.jsonl) and `events`; nothing is printed.
+    """
+
+    def __init__(self, log, events, every_collection=False, rescan=3.0):
+        self.log, self.events = log, events
+        self.every_collection, self.rescan = every_collection, rescan
+        _hid, _setupapi, self.kernel32 = load_dlls()
+        self.active = set()
+        self._lock = threading.Lock()
+        self._stop = threading.Event()
+
+    def start(self):
+        threading.Thread(target=self._scan_forever, daemon=True).start()
+
+    def listening(self):
+        with self._lock:
+            return sorted(self.active)
+
+    def _scan_forever(self):
+        while not self._stop.is_set():
+            try:
+                found = collections()
+            except OSError as error:
+                self.events.add(None, f"HID scan failed: {error}")
+                found = []
+            for entry in found:
+                if not (is_vendor(entry) or self.every_collection):
+                    continue
+                with self._lock:
+                    if entry["path"] in self.active:
+                        continue
+                    self.active.add(entry["path"])
+                threading.Thread(target=self._reader, args=(entry,), daemon=True).start()
+            self._stop.wait(self.rescan)
+
+    def _reader(self, entry):
+        where = (f"{entry['pid']} {entry['usage_page']}"
+                 f"{' (Bluetooth)' if entry['bluetooth'] else ''}")
+        handle, _ = open_path(self.kernel32, entry["path"], write=False)
         if not handle:
-            log.write({"type": "error", "path": entry["path"], "error": "cannot open"})
+            self.log.write({"type": "error", "path": entry["path"], "error": "cannot open"})
+            self.events.add(None, f"cannot open {where}")
+            with self._lock:
+                self.active.discard(entry["path"])
             return
+        self.events.add(None, f"listening on {where}")
         size = max(entry.get("input_len") or 0, 2)
         buf = ctypes.create_string_buffer(size)
         got = wintypes.DWORD()
-        while not stop.is_set():
-            if not kernel32.ReadFile(handle, buf, size, ctypes.byref(got), None):
-                log.write({"type": "error", "path": entry["path"],
-                           "error": f"ReadFile {ctypes.get_last_error()}"})
+        while not self._stop.is_set():
+            if not self.kernel32.ReadFile(handle, buf, size, ctypes.byref(got), None):
+                error = ctypes.get_last_error()
+                self.log.write({"type": "error", "path": entry["path"],
+                                "error": f"ReadFile {error}"})
+                self.events.add(None, f"stopped listening on {where} (ReadFile {error},"
+                                      " usually the keyboard went away)")
                 break
             data = buf.raw[:got.value]
-            record = {"type": "input", "pid": entry["pid"], "usage_page": entry["usage_page"],
+            record = {"type": "input", "pid": entry["pid"],
+                      "usage_page": entry["usage_page"],
                       "bluetooth": entry["bluetooth"], "data": data.hex()}
             meaning = zenduo_re.describe_vendor_input(data)
             if meaning:
                 record["meaning"] = meaning
-            log.write(record)
-            print(f"  {time.strftime('%H:%M:%S')} {entry['usage_page']} "
-                  f"{data.hex(' ')}{'  ' + meaning if meaning else ''}")
-        kernel32.CloseHandle(handle)
+            self.log.write(record)
+            self.events.add("keyboard report",
+                            f"HID input {where}: {data.hex(' ')}"
+                            f"{'  ' + meaning if meaning else ''}")
+        self.kernel32.CloseHandle(handle)
+        with self._lock:
+            self.active.discard(entry["path"])
 
-    for entry in targets:
-        print(f"listening on {entry['pid']} {entry['usage_page']} ({entry['path']})")
-        threading.Thread(target=reader, args=(entry,), daemon=True).start()
-    zenduo_re.run_markers(markers, args.scenario)
-    stop.set()       # readers block in ReadFile; the process exit ends them
+    def stop(self):
+        self._stop.set()        # readers blocked in ReadFile end with the process
+
+
+def cmd_listen(args):
+    out = zenduo_re.session_dir("hid-listen", args.out)
+    log = zenduo_re.JsonLog(os.path.join(out, "hid-input.jsonl"))
+    events = zenduo_re.EventLog(os.path.join(out, "events.log"))
+    markers = zenduo_re.JsonLog(os.path.join(out, "markers.jsonl"))
+    listener = HidListener(log, events, args.every_collection)
+    listener.start()
+    time.sleep(1.0)
+    print(f"listening on {len(listener.listening())} vendor collection(s);"
+          f" each report goes to {events.path}")
+    zenduo_re.run_steps(markers, args.scenario,
+                        detect=lambda: zenduo_re.keyboard_transport(present_paths()),
+                        after_step=lambda _i: zenduo_re.count_summary(events.take_counts()))
+    listener.stop()
+    events.close()
     print(f"written {out}")
     return 0
 
