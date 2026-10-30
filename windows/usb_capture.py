@@ -5,8 +5,9 @@ r"""Record the USB traffic to the docked keyboard, cut by action.
     py usb_capture.py --scenario keyboard
     py usb_capture.py --scenario attach --interface \\.\USBPcap2
 
-Needs USBPcap (https://desowin.org/usbpcap/, also installed by the Wireshark
-installer when ticked) and an Administrator terminal. Without --interface it
+Needs USBPcap: install Wireshark (https://www.wireshark.org/download.html)
+with the "USBPcap" component ticked, then reboot. Run from an Administrator
+terminal. Without --interface it
 records every USBPcap root hub at once, one file each, because which root hub
 the pogo connector hangs off is not known yet (VERIFY-ON-HW, then pass it).
 
@@ -43,7 +44,8 @@ def find_exe(explicit):
                       r"C:\Program Files\Wireshark\extcap\USBPcapCMD.exe"):
         if candidate and os.path.isfile(candidate):
             return candidate
-    sys.exit("usb_capture: USBPcapCMD.exe not found. Install USBPcap or pass --exe.")
+    sys.exit("usb_capture: USBPcapCMD.exe not found. Install Wireshark with the"
+             " USBPcap component ticked and reboot, or pass --exe.")
 
 
 def list_interfaces(exe):

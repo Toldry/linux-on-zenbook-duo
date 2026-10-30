@@ -79,9 +79,16 @@ mostly to find which device id and which value, or which bytes.
 py -m pip install frida numpy sounddevice
 ```
 
-4. USBPcap: https://desowin.org/usbpcap/. It also comes with the Wireshark
-   installer (https://www.wireshark.org/download.html) if you tick it.
-   **Reboot after installing it.**
+4. Wireshark, with USBPcap: download the Windows x64 installer from
+   https://www.wireshark.org/download.html and run it. On the component
+   page, **tick "USBPcap"**. It is unticked by default, and
+   `usb_capture.py` needs it. Npcap, which the installer also offers, is
+   for network capture and is not needed here. Use the graphical installer:
+   a silent install (`winget`, `/S`) skips USBPcap. **Reboot afterwards.**
+   USBPcap's driver loads only at boot, and until then `usb_capture.py`
+   finds no interfaces. Wireshark also lets you look at the captures by
+   eye: the display filter `usbhid || usb.idVendor == 0x0b05` is a start,
+   and `analyze.py` does the decoding.
 5. Optional, for on-air Bluetooth: Microsoft's Bluetooth Test Platform
    (BTVS), https://learn.microsoft.com/windows-hardware/drivers/bluetooth/testing-btp-tools-btvs.
    **GUESS, about 65 %** that it works with the Duo's Intel radio without a
