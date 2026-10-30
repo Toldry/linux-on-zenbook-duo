@@ -31,8 +31,8 @@ What the machine does under Windows, whether it does it here, and how.
 | Fn-row: volume, mute | native consumer-page usages | ✅ |
 | Fn-row: Fn-lock (Fn+Esc) | captured (`5a 4e`), swap not performed | 🧪 → phase Q |
 | Fn-row: mic mute, emoji | `watch-fn` → `wpctl set-mute … toggle`, `ibus emoji` (codes `5a 7c`/`5a 7e`, per hid-asus) | 🧪 2026-09-05 → verify which keycaps |
-| Fn-row: F7 (types Super+P) | toggles dark mode: `duo hotkeys apply` moves Super+P from GNOME's switcher to `duo theme toggle` (`F7_DARK_MODE`) | ✅ 2026-10-30 |
-| Fn-row: F8 (`5a 9c`) | `watch-fn` opens the default terminal (`F8_TERMINAL`) | 🧪 2026-10-30 |
+| Fn-row: F7 (types Super+P) | opens a terminal: `duo hotkeys apply` moves Super+P from GNOME's switcher to `duo terminal` (`F7_TERMINAL`) | 🧪 2026-10-30 (the shortcut itself ✅ as dark mode) |
+| Fn-row: F8 (`5a 9c`) | `watch-fn` toggles dark mode, `duo theme toggle` (`F8_DARK_MODE`) | 🧪 2026-10-30 |
 | Fn-row: F12, MyASUS (`5a 86`, per hid-asus) | `watch-fn` opens and closes the duo window, `duo gui --toggle` (`F12_GUI`) | 🧪 2026-10-30, code not yet captured on this unit |
 | Fn-row: camera | not attributed yet (`5a 3d` is a status report, not a key) | 📝 phase Q |
 | Keyboard backlight level remembered across dock/undock/sleep | state file + restore on re-init | ✅ |

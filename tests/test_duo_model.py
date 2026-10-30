@@ -185,7 +185,7 @@ class ValidateTest(unittest.TestCase):
 
 
 class F7KnobTest(unittest.TestCase):
-    """F7_DARK_MODE is read by the installer only; the window and the screen
+    """F7_TERMINAL is read by the installer only; the window and the screen
     must move GNOME's shortcut along with the knob, or the switch lies."""
 
     def test_the_shortcut_follows_the_knob(self):
@@ -198,12 +198,12 @@ class F7KnobTest(unittest.TestCase):
         m = dm.Model()
         with mock.patch.object(dm, "cli", side_effect=fake_cli), \
                 mock.patch.object(dm, "read_config", return_value=("", {}, False, "")):
-            m.config_set("F7_DARK_MODE", "0")
-            m.config_set("F7_DARK_MODE", "1")
-            m.config_set("F8_TERMINAL", "0")
-        self.assertEqual(calls, [("config", "set", "F7_DARK_MODE", "0"), ("hotkeys", "remove"),
-                                 ("config", "set", "F7_DARK_MODE", "1"), ("hotkeys", "apply"),
-                                 ("config", "set", "F8_TERMINAL", "0")])
+            m.config_set("F7_TERMINAL", "0")
+            m.config_set("F7_TERMINAL", "1")
+            m.config_set("F8_DARK_MODE", "0")
+        self.assertEqual(calls, [("config", "set", "F7_TERMINAL", "0"), ("hotkeys", "remove"),
+                                 ("config", "set", "F7_TERMINAL", "1"), ("hotkeys", "apply"),
+                                 ("config", "set", "F8_DARK_MODE", "0")])
 
 
 class ClearTest(unittest.TestCase):

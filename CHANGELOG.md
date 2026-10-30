@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### F7 and F8 swapped; the window is quieter and easier to read
+
+- F7 now opens a terminal and F8 toggles dark mode (`F7_TERMINAL`,
+  `F8_DARK_MODE`; the old `F7_DARK_MODE` and `F8_TERMINAL` lines are
+  ignored). `./install.sh` moves the GNOME shortcut and removes the old one;
+  `duo terminal` is the new command F7 runs
+- the window no longer pops up "ok" after every click; only failures do
+- Settings speaks plainly: each setting has a title and a sentence for
+  someone who has not read the code (the conf key is the tooltip), grouped as
+  Screens, Keyboard shortcuts, Brightness and keyboard light, Battery
+- Logs and Doctor have Copy buttons; the header has an About button and
+  Overview a link to the repository
+
 ### A window for everything, opened with F12
 
 - `duo gui` opens a GNOME window (GTK 4 + libadwaita) with the screen's

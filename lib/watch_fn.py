@@ -19,7 +19,7 @@ This daemon closes the loop:
       kbd-backlight  -> `duo kb-backlight` cycle 0..3
       mic-mute       -> `wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle`
       emoji          -> `ibus emoji` (the picker GNOME's Ctrl+; opens)
-      split-screen   -> a terminal (bare F8)
+      split-screen   -> `duo theme toggle`, dark mode (bare F8)
       myasus         -> `duo gui --toggle`, the duo window (bare F12)
   - honors ~/.config/zenduo/fn-map.json (from `duo fn-map`) as overrides, so
     newly-captured codes map onto actions without touching this file
@@ -31,7 +31,6 @@ or by hand: `duo watch-fn`. Needs the udev uaccess rule for hidraw access.
 import json
 import os
 import select
-import shutil
 import subprocess
 import sys
 import time
@@ -79,19 +78,6 @@ DEFAULT_ACTIONS = {
 HANDLED = {"brightness-down", "brightness-up", "kbd-backlight", "second-screen",
            "mic-mute", "emoji", "fn-lock", "split-screen", "myasus"}
 
-# F8 (split-screen) opens a terminal. xdg-terminal-exec is the freedesktop
-# launcher that honours the user's chosen terminal; the rest are GNOME's own,
-# newest first, for systems without it.
-TERMINALS = (["xdg-terminal-exec"], ["ptyxis", "--new-window"], ["kgx"],
-             ["gnome-terminal"])
-
-
-def terminal_argv(which=None):
-    which = which or shutil.which
-    for argv in TERMINALS:
-        if which(argv[0]):
-            return argv
-    return None
 
 KNOWN_ACTIONS = {"brightness-down", "brightness-up", "fn-lock", "second-screen",
                  "kbd-backlight", "mute", "volume-down", "volume-up",
@@ -279,18 +265,9 @@ class Dispatcher:
             # environment, same as gdbus does for brightness.
             self.spawn(["ibus", "emoji"])
         elif action == "split-screen":
-            if os.environ.get("ZENDUO_F8_TERMINAL", "1") != "1":
-                return  # F8_TERMINAL=0 in zenduo.conf
-            argv = terminal_argv()
-            if argv is None:
-                log("no terminal found (looked for "
-                    + ", ".join(t[0] for t in TERMINALS) + ")")
-            else:
-                # In a unit of its own: a child of this service would be in
-                # its cgroup, and restarting duo-watch-fn would close every
-                # terminal F8 ever opened.
-                self.spawn(["systemd-run", "--user", "--collect", "--quiet",
-                            "--", *argv])
+            if os.environ.get("ZENDUO_F8_DARK_MODE", "1") != "1":
+                return  # F8_DARK_MODE=0 in zenduo.conf
+            self.spawn([DUO, "theme", "toggle"])
         elif action == "myasus":
             if os.environ.get("ZENDUO_F12_GUI", "1") != "1":
                 return  # F12_GUI=0 in zenduo.conf

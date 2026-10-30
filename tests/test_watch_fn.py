@@ -94,27 +94,20 @@ class FnRow(unittest.TestCase):
         self.assertEqual(table[0x10], "brightness-down", "defaults survive an override file")
 
 
-class Terminal(unittest.TestCase):
-    def test_f8_opens_the_first_terminal_found_in_its_own_unit(self):
+class DarkMode(unittest.TestCase):
+    def test_f8_toggles_dark_mode(self):
         from unittest import mock
         d = Recorder()
-        found = {"ptyxis", "gnome-terminal"}
-        with mock.patch.object(watch_fn.shutil, "which", side_effect=found.__contains__), \
-                mock.patch.dict(os.environ, {"ZENDUO_F8_TERMINAL": "1"}):
+        with mock.patch.dict(os.environ, {"ZENDUO_F8_DARK_MODE": "1"}):
             d.dispatch(0x9C, "split-screen")
-        self.assertEqual(d.spawned, [["systemd-run", "--user", "--collect", "--quiet",
-                                      "--", "ptyxis", "--new-window"]])
+        self.assertEqual(d.spawned, [[watch_fn.DUO, "theme", "toggle"]])
 
-    def test_f8_terminal_off_runs_nothing(self):
+    def test_f8_dark_mode_off_runs_nothing(self):
         from unittest import mock
         d = Recorder()
-        with mock.patch.dict(os.environ, {"ZENDUO_F8_TERMINAL": "0"}):
+        with mock.patch.dict(os.environ, {"ZENDUO_F8_DARK_MODE": "0"}):
             d.dispatch(0x9C, "split-screen")
         self.assertEqual(d.spawned, [])
-
-    def test_xdg_terminal_exec_wins_when_present(self):
-        self.assertEqual(watch_fn.terminal_argv(lambda name: True), ["xdg-terminal-exec"])
-        self.assertIsNone(watch_fn.terminal_argv(lambda name: False))
 
 
 class Window(unittest.TestCase):

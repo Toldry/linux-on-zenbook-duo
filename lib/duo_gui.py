@@ -31,6 +31,7 @@ import duo_model as dm  # noqa: E402  (same directory)
 # desktop file is named after it so GNOME puts the window under that launcher.
 APP_ID = "io.github.zenduo.Duo"
 TITLE = "Zenbook Duo"
+REPO_URL = "https://github.com/Toldry/linux-on-zenbook-duo"
 
 LOG_LINES = 400                 # journal lines the Logs page keeps
 THEME_SECONDS = 2.0             # F7 flips the style behind the window's back
@@ -41,11 +42,50 @@ LAYOUT_BUTTONS = (("Laptop", "laptop"), ("External", "external"), ("Extend", "ex
                   ("Mirror", "mirror"))
 BRIGHTNESS_BUTTONS = (("−", "down"), ("+", "up"), ("Match", "match"))
 
-# Settings page sections, by the daemon that reads the knob.
 PAGES = ("overview", "features", "settings", "logs", "doctor")
 
-KNOB_GROUPS = (("Displays", "watch-displays"), ("Keys and backlight", "watch-fn"),
-               ("Other", ""))
+# The Settings page, in the order it is shown: (title, description).
+KNOB_GROUPS = (
+    ("Screens", ""),
+    ("Keyboard shortcuts", ""),
+    ("Brightness and keyboard light", ""),
+    ("Battery", "Stops charging at this level, which makes the battery last longer. "
+                "20 to 100; empty charges to 100 %."),
+)
+
+# What each knob is called on the Settings page: (group, title, subtitle).
+# duo_model's descriptions are written for `duo config`; these are written for
+# someone who has not read the code. The key itself is the row's tooltip.
+KNOB_TEXT = {
+    "APPLY_METHOD": ("Screens", "How layouts are applied",
+                     "Temporary changes the screens without asking. Persistent makes GNOME ask "
+                     "“Keep display settings?” after every dock, undock and wake."),
+    "DOCK_POLICY": ("Screens", "Bottom screen off under the keyboard",
+                    "Turns the bottom screen off while the keyboard lies on it, and back on "
+                    "when you lift it."),
+    "REMEMBER_LAYOUT": ("Screens", "Remember the layout for each set of monitors",
+                        "Like Windows: positions, scaling and the main screen come back when "
+                        "the same monitors are connected again."),
+    "LOGIN_SCREEN_LAYOUT": ("Screens", "Same layout on the login screen",
+                            "The password prompt appears on the screen you were using."),
+    "TOUCH_MAPPING": ("Screens", "Touch and pen stay on the screen you touch",
+                      "Without this, GNOME sends touches on both screens to the top one."),
+    "F7_TERMINAL": ("Keyboard shortcuts", "F7 opens a terminal",
+                    "Instead of GNOME's display switcher. F7 types Super+P, so that shortcut "
+                    "does the same; Ctrl+Alt+T keeps working too."),
+    "F8_DARK_MODE": ("Keyboard shortcuts", "F8 switches dark mode",
+                     "Light and dark style, as Settings → Appearance switches it."),
+    "F12_GUI": ("Keyboard shortcuts", "F12 opens this window",
+                "Press F12 again while the window is in front to close it."),
+    "BACKLIGHT_SOURCE": ("Brightness and keyboard light", "Brightness is copied from",
+                         "The screen the other one follows; intel_backlight is the top screen."),
+    "BACKLIGHT_TARGET": ("Brightness and keyboard light", "Brightness is copied to",
+                         "Automatic finds the bottom screen."),
+    "KB_BACKLIGHT_RESTORE": ("Brightness and keyboard light", "Restore the keyboard light",
+                             "The keyboard forgets its light level when it is docked, undocked "
+                             "or the laptop wakes up; this sets it back."),
+    "BATTERY_LIMIT": ("Battery", "Charge limit in percent", ""),
+}
 
 
 # ── what the window shows (no GTK below this line until make_app) ─────────────
@@ -114,9 +154,19 @@ def choice_label(value):
     return value if value else "(automatic)"
 
 
+def knob_text(knob):
+    """(group, title, subtitle); a knob nobody wrote words for yet still shows."""
+    return KNOB_TEXT.get(knob.key, (KNOB_GROUPS[-1][0], knob.key, knob.desc))
+
+
 def knob_section(knob):
-    known = {daemon for _title, daemon in KNOB_GROUPS}
-    return knob.daemon if knob.daemon in known else ""
+    return knob_text(knob)[0]
+
+
+def show_result(result):
+    """Toast a finished action only when it failed: success shows on the page
+    itself, and a toast saying "ok" after every click was noise."""
+    return not result.ok
 
 
 def journal_text(entries, errors_only=False, now=None, limit=LOG_LINES, error=""):
@@ -205,6 +255,10 @@ def make_app(Adw, Gio, GLib, Gtk, Pango):
             header = Adw.HeaderBar()
             header.set_title_widget(Adw.ViewSwitcher(stack=self.stack,
                                                      policy=Adw.ViewSwitcherPolicy.WIDE))
+            about = Gtk.Button(icon_name="help-about-symbolic",
+                               tooltip_text="About, and the project on GitHub")
+            about.connect("clicked", lambda *_: self.about())
+            header.pack_end(about)
             view = Adw.ToolbarView()
             view.add_top_bar(header)
             view.set_content(self.toasts)
@@ -251,7 +305,8 @@ def make_app(Adw, Gio, GLib, Gtk, Pango):
 
         def done(self, result, feature, then):
             self.busy.discard(feature)
-            self.toast(result)
+            if show_result(result):
+                self.toast(result)
             if then is not None:
                 then(result)
             self.sync(force=True)
@@ -268,6 +323,25 @@ def make_app(Adw, Gio, GLib, Gtk, Pango):
                 toast.set_button_label("Details")
                 toast.connect("button-clicked", lambda *_: self.details(result))
             self.toasts.add_toast(toast)
+
+        def copy(self, view, what):
+            buf = view.get_buffer()
+            text = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False).strip()
+            if not text:
+                self.toast(dm.Result(False, "Copy", "nothing to copy yet"))
+                return
+            self.get_clipboard().set(text + "\n")
+            self.toast(dm.Result(True, "Copy", f"Copied {len(text.splitlines())} {what}"))
+
+        def about(self):
+            dialog = Adw.AboutDialog(
+                application_name=TITLE, application_icon="preferences-desktop-display",
+                version=self.model.version_text, website=REPO_URL,
+                issue_url=REPO_URL + "/issues", license_type=Gtk.License.MIT_X11,
+                comments="Dual screens, keyboard, audio and power for the ASUS Zenbook Duo "
+                         "(2024) on Linux. The same things are in a terminal: duo")
+            dialog.add_link("Source code on GitHub", REPO_URL)
+            dialog.present(self)
 
         def details(self, result):
             dialog = Adw.AlertDialog(heading=result.title, body=result.output)
@@ -320,7 +394,7 @@ def make_app(Adw, Gio, GLib, Gtk, Pango):
             page.add(screens)
 
             look = Adw.PreferencesGroup(title="Look and keyboard")
-            self.dark_row = Adw.SwitchRow(title="Dark style", subtitle="what F7 toggles")
+            self.dark_row = Adw.SwitchRow(title="Dark style", subtitle="what F8 toggles")
             self.dark_row.connect("notify::active", self.on_dark)
             look.add(self.dark_row)
             row = Adw.ActionRow(title="Keyboard backlight")
@@ -348,6 +422,10 @@ def make_app(Adw, Gio, GLib, Gtk, Pango):
             self.problems.add_css_class("caption")
             problems.add(self.problems)
             page.add(problems)
+            footer = Adw.PreferencesGroup()
+            footer.add(Gtk.LinkButton(uri=REPO_URL, label="linux-on-zenbook-duo on GitHub",
+                                      halign=Gtk.Align.CENTER))
+            page.add(footer)
             return page
 
         def on_dark(self, row, _pspec):
@@ -464,26 +542,27 @@ def make_app(Adw, Gio, GLib, Gtk, Pango):
             self.knob_shown = {}       # the value each entry row last showed
             names = self.backlight_names = [n for n, _p in dm.backlights()]
             groups = {}
-            for title, daemon in KNOB_GROUPS:
-                desc = f"read by {daemon}; a change asks to restart it" if daemon else ""
-                groups[daemon] = Adw.PreferencesGroup(title=title, description=desc)
-                page.add(groups[daemon])
+            for title, desc in KNOB_GROUPS:
+                groups[title] = Adw.PreferencesGroup(title=title, description=desc)
+                page.add(groups[title])
             for knob in dm.KNOBS:
                 kind = knob_kind(knob, names)
+                _group, title, subtitle = knob_text(knob)
                 if kind == "switch":
-                    row = Adw.SwitchRow(title=knob.key, subtitle=knob.desc)
+                    row = Adw.SwitchRow(title=title, subtitle=subtitle)
                     row.connect("notify::active", self.on_switch_knob, knob.key)
                 elif kind == "choice":
                     choices = knob_choices(knob, names)
-                    row = Adw.ComboRow(title=knob.key, subtitle=knob.desc,
+                    row = Adw.ComboRow(title=title, subtitle=subtitle,
                                        model=Gtk.StringList.new([choice_label(c) for c in choices]))
                     row.choices = choices
                     row.connect("notify::selected", self.on_choice_knob, knob.key)
                 else:
-                    row = Adw.EntryRow(title=f"{knob.key} — {knob.desc}", show_apply_button=True)
+                    row = Adw.EntryRow(title=title, show_apply_button=True)
                     row.connect("apply", self.on_entry_knob, knob.key)
                 if kind != "entry":
-                    row.set_subtitle_lines(3)
+                    row.set_subtitle_lines(0)      # wrap, never ellipsize
+                row.set_tooltip_text(f"{knob.key} in zenduo.conf")
                 groups[knob_section(knob)].add(row)
                 self.knob_rows[knob.key] = row
             return page
@@ -493,7 +572,8 @@ def make_app(Adw, Gio, GLib, Gtk, Pango):
                 follow = after_knob(key, value, result)
                 if follow and self.model.unit(follow[1]) and self.model.unit(follow[1]).state == "running":
                     daemon = follow[1]
-                    self.toast(dm.Result(True, "", f"{daemon} reads {key} at start"),
+                    self.toast(dm.Result(True, "", "Takes effect when the background "
+                                                   "service restarts"),
                                button=("Restart", lambda: self.act(self.model.restart, daemon,
                                                                     feature=daemon)))
             self.act(self.model.config_set, key, value, then=then)
@@ -545,7 +625,9 @@ def make_app(Adw, Gio, GLib, Gtk, Pango):
             show_all.connect("clicked", lambda *_: (self.model.show_all(), self.sync(True)))
             title = Gtk.Label(label="zenduo journal (duo log)", xalign=0, hexpand=True)
             title.add_css_class("dim-label")
-            for w in (title, only, show_all):
+            copy = Gtk.Button(icon_name="edit-copy-symbolic", tooltip_text="Copy these lines")
+            copy.connect("clicked", lambda *_: self.copy(self.log_view, "log lines"))
+            for w in (title, only, show_all, copy):
                 bar.append(w)
             box.append(bar)
             self.log_view, self.log_scroll = monospace_view()
@@ -579,7 +661,9 @@ def make_app(Adw, Gio, GLib, Gtk, Pango):
             self.doctor_button = Gtk.Button(label="Run doctor")
             self.doctor_button.add_css_class("suggested-action")
             self.doctor_button.connect("clicked", lambda *_: self.model.run_doctor_async())
-            for w in (self.doctor_status, self.doctor_spinner, self.doctor_button):
+            copy = Gtk.Button(icon_name="edit-copy-symbolic", tooltip_text="Copy the report")
+            copy.connect("clicked", lambda *_: self.copy(self.doctor_view, "doctor lines"))
+            for w in (self.doctor_status, self.doctor_spinner, copy, self.doctor_button):
                 bar.append(w)
             box.append(bar)
             self.doctor_view, _scroll = monospace_view()

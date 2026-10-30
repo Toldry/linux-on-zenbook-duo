@@ -36,7 +36,7 @@ export ZENDUO_KB_BACKLIGHT_RESTORE="${ZENDUO_KB_BACKLIGHT_RESTORE:-$(conf_get KB
 export ZENDUO_REMEMBER_LAYOUT="${ZENDUO_REMEMBER_LAYOUT:-$(conf_get REMEMBER_LAYOUT)}"
 export ZENDUO_LOGIN_SCREEN_LAYOUT="${ZENDUO_LOGIN_SCREEN_LAYOUT:-$(conf_get LOGIN_SCREEN_LAYOUT)}"
 export ZENDUO_TOUCH_MAPPING="${ZENDUO_TOUCH_MAPPING:-$(conf_get TOUCH_MAPPING)}"
-export ZENDUO_F8_TERMINAL="${ZENDUO_F8_TERMINAL:-$(conf_get F8_TERMINAL)}"
+export ZENDUO_F8_DARK_MODE="${ZENDUO_F8_DARK_MODE:-$(conf_get F8_DARK_MODE)}"
 export ZENDUO_F12_GUI="${ZENDUO_F12_GUI:-$(conf_get F12_GUI)}"
 
 KBD_VID=0b05
@@ -101,8 +101,9 @@ usage: duo-cli <command>        (duo <command> runs the same thing)
   gui [--toggle]         the same things in a GNOME window (GTK 4 + libadwaita);
                          --toggle closes it when it is focused (what F12 runs)
   hotkeys apply|remove|show
-                         F7 (which types Super+P) toggles dark mode instead of
+                         F7 (which types Super+P) opens a terminal instead of
                          GNOME's display switcher, or gets the switcher back
+  terminal               open the default terminal (what F7 runs)
   kb-init                switch the keyboard into hotkey mode (enables Fn/media keys)
   watch-fn               daemon: init keyboard on connect + act on media keys
   kb-backlight <0-3>     keyboard backlight (native LED if present, else HID);
@@ -1036,6 +1037,7 @@ case "$cmd" in
   theme)              exec python3 "$LIB/theme.py" "$@" ;;
   gui)                exec "$PYGI" "$LIB/duo_gui.py" "$@" ;;
   hotkeys)            cmd_hotkeys "$@" ;;
+  terminal)           exec python3 "$LIB/terminal.py" "$@" ;;
   kb-init)            cmd_kb_init "$@" ;;
   watch-fn)           cmd_watch_fn "$@" ;;
   kb-backlight)       cmd_kb_backlight "$@" ;;

@@ -83,10 +83,27 @@ class Knobs(unittest.TestCase):
         method = dm.KNOB_BY_KEY["APPLY_METHOD"]
         self.assertEqual(dg.knob_choices(method, ["a"]), ["temporary", "persistent"])
 
-    def test_every_knob_lands_in_a_section(self):
-        sections = {daemon for _t, daemon in dg.KNOB_GROUPS}
+    def test_every_knob_has_words_and_lands_in_a_group(self):
+        groups = {title for title, _desc in dg.KNOB_GROUPS}
         for k in dm.KNOBS:
-            self.assertIn(dg.knob_section(k), sections, k.key)
+            self.assertIn(k.key, dg.KNOB_TEXT, k.key)
+            self.assertIn(dg.knob_section(k), groups, k.key)
+
+    def test_the_f_keys_are_one_group(self):
+        k = dm.KNOB_BY_KEY
+        self.assertEqual({dg.knob_section(k[key]) for key in ("F7_TERMINAL", "F8_DARK_MODE", "F12_GUI")},
+                         {"Keyboard shortcuts"})
+
+    def test_a_knob_without_words_still_shows(self):
+        knob = dm.Knob("NEW_KNOB", "bool", "something new")
+        self.assertEqual(dg.knob_text(knob), (dg.KNOB_GROUPS[-1][0], "NEW_KNOB", "something new"))
+
+
+class Toasts(unittest.TestCase):
+    def test_only_a_failure_pops_up(self):
+        self.assertFalse(dg.show_result(dm.Result(True, "duo top", "")))
+        self.assertFalse(dg.show_result(dm.Result(True, "duo top", "enabled eDP-2")))
+        self.assertTrue(dg.show_result(dm.Result(False, "duo top", "refused")))
 
     def test_a_daemon_knob_offers_a_restart(self):
         ok, bad = dm.Result(True, "c"), dm.Result(False, "c")
