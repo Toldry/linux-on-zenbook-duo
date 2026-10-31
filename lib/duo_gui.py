@@ -237,8 +237,8 @@ KNOB_TEXT = {
     "TOUCH_MAPPING": ("Screens", "Touch and pen stay on the screen you touch",
                       "Without this, GNOME sends touches on both screens to the top one."),
     "F7_TERMINAL": (EXTRAS[0], "F7 opens a terminal",
-                    "Instead of GNOME's display switcher. F7 types Super+P, so that shortcut "
-                    "does the same; Ctrl+Alt+T keeps working too."),
+                    "Instead of GNOME's display switcher. Super+P typed by hand still "
+                    "opens the switcher; Ctrl+Alt+T keeps working too."),
     "F8_DARK_MODE": (EXTRAS[0], "F8 switches dark mode",
                      "Light and dark style, as Settings → Appearance switches it. Off, F8 "
                      "swaps the windows between the screens, as under Windows (from the next "

@@ -96,7 +96,10 @@ kept so code comments and the research stay cross-referenced.
 - **Bare F7 types Super+P** on the ordinary keyboard report (`02 08 00 13`:
   modifier Left GUI, usage P), with no vendor report, so GNOME raises its
   display switcher (measured 2026-10-30, `duo fn-probe` and `duo
-  watch-input`). It can only be rebound in GNOME's shortcuts: `duo hotkeys`. Volume and mute
+  watch-input`). It can only be rebound in GNOME's shortcuts: `duo hotkeys`.
+  Super and P come in that one report, where a hand sends Super first; that
+  is how `duo super-p` tells F7 from a typed Super+P (lib/hotkeys.py). The
+  report's shape on Bluetooth is **VERIFY-ON-HW**. Volume and mute
   arrive as standard consumer-page usages and work natively.
 - **Keyboard backlight** is `{0x5a, 0xba, 0xc5, 0xc4, level}` padded to the
   interface's report length. Docking, undocking and resume blank it in
