@@ -206,6 +206,36 @@ class F7KnobTest(unittest.TestCase):
                                  ("config", "set", "F8_DARK_MODE", "0")])
 
 
+class BatteryCareTest(unittest.TestCase):
+    """MyASUS's Battery Care Mode is a switch: 80 % or 100 %, saved, applied
+    now, and kept across the reboot that resets the kernel's threshold."""
+
+    def run_care(self, on, bat_limit_state):
+        from unittest import mock
+        calls = []
+
+        def fake_cli(*args, timeout=30):
+            calls.append(args)
+            return dm.Result(True, "duo " + " ".join(args), "done")
+        m = dm.Model()
+        feature = next(f for f in dm.FEATURES if f.name == "bat-limit")
+        m.units = [dm.Unit(feature, load="loaded", file_state=bat_limit_state)]
+        with mock.patch.object(dm, "cli", side_effect=fake_cli), \
+                mock.patch.object(dm, "read_config", return_value=("", {}, False, "")), \
+                mock.patch.object(dm.Model, "refresh_fast"):
+            m.battery_care(on)
+        return calls
+
+    def test_on_is_80_and_turns_the_login_reapply_on(self):
+        self.assertEqual(self.run_care(True, "disabled"),
+                         [("config", "set", "BATTERY_LIMIT", "80"), ("bat-limit", "80"),
+                          ("enable", "bat-limit")])
+
+    def test_off_is_100_and_leaves_an_enabled_unit_alone(self):
+        self.assertEqual(self.run_care(False, "enabled"),
+                         [("config", "set", "BATTERY_LIMIT", "100"), ("bat-limit", "100")])
+
+
 class ClearTest(unittest.TestCase):
     """`c` on the screen hides what has been read; journald keeps it."""
 

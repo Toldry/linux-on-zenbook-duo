@@ -75,8 +75,20 @@ class Knobs(unittest.TestCase):
         self.assertEqual(kinds["F12_GUI"], "switch")
         self.assertEqual(kinds["APPLY_METHOD"], "choice")
         self.assertEqual(kinds["BACKLIGHT_SOURCE"], "choice")
-        self.assertEqual(kinds["BATTERY_LIMIT"], "entry")
+        self.assertEqual(kinds["BATTERY_LIMIT"], "battery-care")
         self.assertEqual(kinds["KB_BACKLIGHT_IDLE_OFF"], "choice")
+
+    def test_battery_care_is_on_below_full(self):
+        # MyASUS's switch: off charges to 100 %, which an empty limit does too.
+        self.assertTrue(dg.battery_care_on("80"))
+        self.assertTrue(dg.battery_care_on("70"))
+        self.assertFalse(dg.battery_care_on("100"))
+        self.assertFalse(dg.battery_care_on(""))
+
+    def test_a_hand_set_limit_is_shown_not_hidden(self):
+        self.assertEqual(dg.battery_care_subtitle("80"), "")
+        self.assertIn("70 %", dg.battery_care_subtitle("70"))
+        self.assertEqual(dg.battery_care_subtitle("100"), "")
 
     def test_idle_off_is_picked_from_plain_durations(self):
         knob = dm.KNOB_BY_KEY["KB_BACKLIGHT_IDLE_OFF"]

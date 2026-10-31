@@ -118,13 +118,13 @@ CARDS = (
          "How hard the fans work. Fn+F steps through the same three modes.",
          "weather-windy-symbolic", "fan-mode"),
     Card("power", "Battery Care Mode",
-         "Stops charging at this level, which makes the battery last longer. MyASUS's "
-         "Battery Care is 80 %. 20 to 100; empty charges to 100 %.",
+         "Stops charging at 80 %, which makes the battery last longer. Off charges "
+         "to 100 %.",
          "battery-good-symbolic", "knob:BATTERY_LIMIT"),
     Card("power", "Instant Full-Charge Mode",
          "Charges to 100 % once, then Battery Care takes over again.",
          "battery-full-charging-symbolic",
-         why="Not done yet: set the limit to 100 for now and back afterwards."),
+         why="Not done yet: switch Battery Care off for now and on again afterwards."),
     Card("power", "Sleep Assistant",
          "Switches to hibernation when standby drains the battery too fast.",
          "weather-clear-night-symbolic",
@@ -250,7 +250,7 @@ KNOB_TEXT = {
                          "Automatic finds the bottom screen."),
     "KB_BACKLIGHT_RESTORE": ("Device", "After dock, undock and wake", ""),
     "KB_BACKLIGHT_IDLE_OFF": ("Device", "Light off after", ""),
-    "BATTERY_LIMIT": ("Device", "Charge limit in percent", ""),
+    "BATTERY_LIMIT": ("Device", "On", ""),
 }
 
 # ── what the window shows (no GTK below this line until make_app) ─────────────
@@ -302,6 +302,8 @@ def feature_state(unit):
 def knob_kind(knob, backlight_names=()):
     """switch | choice | entry: the row a knob gets on the Settings page. A
     backlight is picked from a list, unless the kernel lists none to pick."""
+    if knob.key == "BATTERY_LIMIT":
+        return "battery-care"   # MyASUS's on/off, not a number to type
     if knob.kind == "bool":
         return "switch"
     if knob.kind == "enum" or (knob.kind == "backlight" and backlight_names):
@@ -309,6 +311,19 @@ def knob_kind(knob, backlight_names=()):
     if knob.kind == "int" and knob.values:
         return "choice"    # a few sensible values beat typing a number
     return "entry"
+
+
+def battery_care_on(value):
+    """True when BATTERY_LIMIT stops charging short of full. Empty and 100 both
+    charge to 100 %; a limit set by hand (`duo config set BATTERY_LIMIT 70`)
+    shows as on, with the number, rather than as a wrong off."""
+    return value.isdigit() and int(value) < 100
+
+
+def battery_care_subtitle(value):
+    if battery_care_on(value) and int(value) != dm.BATTERY_CARE_PCT:
+        return f"Set by hand to {value} %; switching it off and on again makes it {dm.BATTERY_CARE_PCT} %."
+    return ""
 
 
 def knob_choices(knob, backlight_names):
@@ -965,6 +980,9 @@ def make_app(Adw, Gio, GLib, Gtk, Pango):
             if kind == "switch":
                 row = Adw.SwitchRow(title=title, subtitle=subtitle)
                 row.connect("notify::active", self.on_switch_knob, knob.key)
+            elif kind == "battery-care":
+                row = Adw.SwitchRow(title=title, subtitle=subtitle)
+                row.connect("notify::active", self.on_battery_care)
             elif kind == "choice":
                 choices = knob_choices(knob, names)
                 row = Adw.ComboRow(title=title, subtitle=subtitle,
@@ -995,6 +1013,10 @@ def make_app(Adw, Gio, GLib, Gtk, Pango):
             if not self.syncing:
                 self.set_knob(key, "1" if row.get_active() else "0")
 
+        def on_battery_care(self, row, _pspec):
+            if not self.syncing:
+                self.act(self.model.battery_care, row.get_active(), feature="bat-limit")
+
         def on_choice_knob(self, row, _pspec, key):
             if self.syncing:
                 return
@@ -1017,6 +1039,10 @@ def make_app(Adw, Gio, GLib, Gtk, Pango):
                 kind = knob_kind(knob, self.backlight_names)
                 if kind == "switch":
                     row.set_active(value == "1")
+                elif kind == "battery-care":
+                    if "bat-limit" not in self.busy:
+                        row.set_active(battery_care_on(value))
+                        row.set_subtitle(battery_care_subtitle(value))
                 elif kind == "choice":
                     if value and value not in row.choices and knob.kind == "int":
                         # Set by hand (`duo config set`) to something the list
