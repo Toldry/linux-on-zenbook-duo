@@ -57,6 +57,9 @@ import tempfile
 import xml.etree.ElementTree as ET
 from xml.sax.saxutils import escape
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from textsafe import printable  # noqa: E402  (same directory)
+
 VERSION = "2"
 
 # MetaMonitorTransform: 0-3 are the rotations, +4 is the flipped variant.
@@ -102,7 +105,8 @@ class Spec(tuple):
     serial = property(lambda self: self[3])
 
     def describe(self):
-        name = " ".join(p for p in (self.vendor, self.product) if p)
+        # The vendor and product come from the monitor's EDID.
+        name = printable(" ".join(p for p in (self.vendor, self.product) if p))
         return f"{self.connector} ({name})" if name else self.connector
 
 

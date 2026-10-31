@@ -42,6 +42,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import dock  # noqa: E402  (same directory; shares dock state + override marker)
 import monitors_xml  # noqa: E402  (same directory; Mutter's layout memory)
+from textsafe import printable  # noqa: E402  (same directory)
 
 class DisplayCtlError(Exception):
     """A failure that carries the exit code the CLI should report.
@@ -619,7 +620,7 @@ def cmd_state(as_json):
         mode = pick_mode(mon)
         state = "ENABLED" if connector in enabled else "disabled"
         print(f"{connector:8s} {state:8s} {mode['width']}x{mode['height']}@{mode['refresh']:.0f} "
-              f"vendor={mon['vendor']} product={mon['product']}")
+              f"vendor={printable(mon['vendor'])} product={printable(mon['product'])}")
 
 
 def run(argv):

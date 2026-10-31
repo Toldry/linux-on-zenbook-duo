@@ -1008,7 +1008,8 @@ cmd_report() {
   echo
   echo "== hid / input =="
   for u in /sys/class/hidraw/hidraw*/device/uevent; do
-    [ -r "$u" ] && { echo "-- $u"; grep -E 'HID_ID|HID_NAME' "$u"; }
+    # A device names itself; cat -v shows its control characters as text.
+    [ -r "$u" ] && { echo "-- $u"; grep -E 'HID_ID|HID_NAME' "$u" | cat -v; }
   done 2>/dev/null || true
   echo "== end of report =="
 }

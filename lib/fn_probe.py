@@ -21,6 +21,9 @@ import os
 import select
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from textsafe import printable  # noqa: E402  (same directory)
+
 VID = "0B05"
 PID = "1B2C"
 
@@ -64,7 +67,7 @@ def main():
             print("fn_probe: hidraw devices present (share this if the keyboard IS connected):",
                   file=sys.stderr)
             for node, hid_id, name in devs:
-                print(f"  {node}  {hid_id}  {name}", file=sys.stderr)
+                print(f"  {node}  {printable(hid_id)}  {printable(name)}", file=sys.stderr)
         return 1
 
     fds = {}

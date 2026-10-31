@@ -30,6 +30,9 @@ import os
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from textsafe import printable  # noqa: E402  (same directory)
+
 UNITS = ("pipewire", "pipewire-pulse", "wireplumber")
 LOOP_COMM = "pw-data-loop"
 RT_PRIORITY = 20        # rtkit's MaxRealtimePriority; PipeWire asks for 88 and gets this
@@ -47,26 +50,11 @@ def run(argv, timeout=10):
 
 # ── Bluetooth ────────────────────────────────────────────────────────────────
 
-# A Bluetooth peer names itself, and BlueZ keeps any valid UTF-8, terminal
-# escape sequences included. Control characters (C0, DEL and C1) become "?"
-# once, here, so nothing that prints a device name can forget to. A tab or a
-# newline would also break the tab-separated lines `duo doctor` reads.
-UNPRINTABLE = dict.fromkeys([*range(0x20), 0x7F, *range(0x80, 0xA0)], "?")
-
-
-def printable(value):
-    """`value` with every string in it made safe to print."""
-    if isinstance(value, str):
-        return value.translate(UNPRINTABLE)
-    if isinstance(value, list):
-        return [printable(v) for v in value]
-    if isinstance(value, dict):
-        return {k: printable(v) for k, v in value.items()}
-    return value
-
-
 def read_pw_dump():
-    """Every PipeWire object as pw-dump prints it, or [] without a server."""
+    """Every PipeWire object as pw-dump prints it, or [] without a server.
+
+    Every string in it is made printable once, here: BlueZ keeps any valid
+    UTF-8 a Bluetooth peer names itself with, escape sequences included."""
     rc, out = run(["pw-dump"])
     if rc != 0:
         return []

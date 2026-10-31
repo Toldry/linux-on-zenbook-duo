@@ -209,6 +209,13 @@ class Format(unittest.TestCase):
             mx.parse("<monitors version=\"2\">")
 
 
+class Describe(unittest.TestCase):
+    def test_an_edid_name_cannot_carry_terminal_escapes(self):
+        # A monitor names itself in its EDID, 13 bytes of whatever it likes.
+        spec = mx.Spec("DP-1", "AB\x1b]0;x\x07", "Mon\x9b2J", "")
+        self.assertEqual(spec.describe(), "DP-1 (AB?]0;x? Mon?2J)")
+
+
 class Snapshot(unittest.TestCase):
     def setUp(self):
         self.monitors = {
