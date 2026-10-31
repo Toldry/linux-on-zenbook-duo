@@ -708,7 +708,6 @@ class Services(View):
 
     def state_of(self, f, u):
         """(text, level, detail) for a feature row."""
-        m, g = self.m, self.app.g
         if f.scope == "user" or f.name == "amp-check":
             if u is None:
                 return ("unknown", "off", "")

@@ -18,13 +18,14 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
-      - name: bash syntax
-        run: bash -n bin/duo-cli helper/zenduo-helper install.sh uninstall.sh lib/conf.sh system/*.sh tests/*.sh
-      - name: shellcheck
+      # The file lists live in the Makefile only; here the linters it skips
+      # when missing are installed, so none is skipped.
+      - name: make lint (bash -n, shellcheck, py_compile, ruff, fragments, grep -q guard)
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq shellcheck
-          shellcheck -x bin/duo-cli helper/zenduo-helper install.sh uninstall.sh lib/conf.sh system/*.sh tests/*.sh
+          pipx install ruff
+          make lint
       # Behavioural tests of the helpers. shellcheck passes on a script whose
       # detection helper returns the wrong answer — that is exactly how the
       # pipefail/SIGPIPE bug shipped. Under sudo so the root-only cases run.
@@ -42,15 +43,12 @@ jobs:
           bin/duo-cli config show
           bin/duo-cli features
           bin/duo version            # the launcher forwards to duo-cli
-          make lint
           bin/duo-cli doctor || true   # a non-Duo runner fails the gate on purpose; it must not crash
 
   python:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
-      - name: bytecompile
-        run: python3 -m py_compile bin/duo lib/*.py tests/*.py tools/*.py windows/*.py
       - name: unit tests (without PyGObject — the layout maths must not need it)
         run: python3 -m unittest discover -s tests -v
       - name: the screen renders without a terminal
@@ -61,8 +59,6 @@ jobs:
         run: |
           sudo apt-get install -y -qq python3-gi
           /usr/bin/python3 -m unittest discover -s tests -v
-      - name: changelog fragments are well-formed
-        run: python3 tools/release.py check
       - name: committed preset matches the generator
         run: diff <(python3 lib/speaker_dsp.py preset) presets/easyeffects/duo-speakers.json
 
