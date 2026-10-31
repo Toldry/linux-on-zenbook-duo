@@ -168,9 +168,12 @@ The process doing all of it is `AsusOptimization.exe`.
 - **`CPU_FAN_CTRL` (`0x00110013`) is a live reading** (it changed after
   steps that touched nothing), not a setting.
 - **Status `5a 3d`** came as `5a 3d 63 00` over Bluetooth and `5a 3d 64 00`
-  docked the day before. **GUESS, about 70 %**: the third byte is the
-  keyboard's battery percentage (0x63 = 99, 0x64 = 100). That does not
-  explain `5a 3d 05 09`, seen on Linux.
+  docked the day before. Windows showed the keyboard battery at 99 % during
+  the Bluetooth capture (read off Settings by the owner, 2026-10-31), so the
+  third byte is very likely the battery percentage (0x63 = 99, 0x64 = 100):
+  about 85 %. That does not explain `5a 3d 05 09` / `06 09`, seen on Linux:
+  perhaps a second kind of `3d` report told apart by the fourth byte
+  (**VERIFY-ON-HW**: compare with GNOME's battery reading when one arrives).
 - **Memory Allocated to GPU does not work from MyASUS on this unit.** Set
   from "Automatic" to 8 GB, then to 1 GB, each time confirmed with MyASUS's
   "Reboot now": after the restart it read "Automatic" again both times.
