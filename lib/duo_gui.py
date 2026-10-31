@@ -467,11 +467,10 @@ def make_app(Adw, Gio, GLib, Gtk, Pango):
 
     LEVEL_CSS = {"ok": "success", "warn": "warning", "err": "error", "off": "dim-label"}
 
-    # MyASUS's cards: a darker panel with a blue rule on the left of each
-    # setting, a big icon, and the controls on the right.
+    # MyASUS's cards are libadwaita's boxed lists here: a big icon, a
+    # sentence, and the controls on the right. (Its blue rule down the left
+    # of each card was dropped at the owner's request, 2026-10-31.)
     CSS = b"""
-    .duo-card { border-left: 3px solid @accent_bg_color; }
-    .duo-card.duo-off { border-left-color: alpha(@window_fg_color, 0.2); }
     .duo-tile { padding: 14px 16px; min-width: 190px; }
     .duo-tile .duo-tile-value { font-size: 1.35em; font-weight: 600; }
     .duo-hero { font-size: 1.9em; font-weight: 700; }
@@ -495,12 +494,8 @@ def make_app(Adw, Gio, GLib, Gtk, Pango):
         row.set_sensitive(False)
         return row
 
-    def card_group(title="", desc="", available=True):
-        group = Adw.PreferencesGroup(title=esc(title), description=esc(desc))
-        group.add_css_class("duo-card")
-        if not available:
-            group.add_css_class("duo-off")
-        return group
+    def card_group(title="", desc=""):
+        return Adw.PreferencesGroup(title=esc(title), description=esc(desc))
 
     def tabbed(stack_pages):
         """MyASUS's tab strip over a page: [(tab, title, widget)]. Text only,
@@ -851,7 +846,7 @@ def make_app(Adw, Gio, GLib, Gtk, Pango):
 
         def card(self, card):
             if not card.available:
-                group = card_group(available=False)
+                group = card_group()
                 group.add(unavailable_row(card.title, card.desc, card.why, card.icon))
                 return group
             group = card_group(card.title, card.desc)
@@ -956,7 +951,7 @@ def make_app(Adw, Gio, GLib, Gtk, Pango):
                 if knob_page(knob) == "screens":
                     groups[knob_section(knob)].add(self.knob_row(knob))
             for title, desc, icon_name, why in SCREENS_TODO:
-                group = card_group(available=False)
+                group = card_group()
                 group.add(unavailable_row(title, desc, why, icon_name))
                 page.add(group)
             return page
@@ -1150,7 +1145,7 @@ def make_app(Adw, Gio, GLib, Gtk, Pango):
             software.add(row)
             page.add(software)
             title, desc, why = SYSTEM_UPDATE
-            group = card_group(available=False)
+            group = card_group()
             group.add(unavailable_row(title, desc, why, "system-software-install-symbolic"))
             page.add(group)
             return page
