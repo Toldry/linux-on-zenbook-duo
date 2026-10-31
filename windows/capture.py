@@ -209,11 +209,15 @@ def main(argv=None):
             changes = zenduo_re.atk_changes(atk_now, after)
             atk_now.update(after)
             for change in changes:
-                linux = zenduo_re.linux_equivalent_atk(
+                live = int(change["device_id"], 16) in zenduo_re.ATK_LIVE_IDS
+                linux = None if live else zenduo_re.linux_equivalent_atk(
                     {"method": "DSTS", "device_id": change["device_id"]})
                 atk_log.write({"type": "atk-change", "step": index, "linux": linux,
-                               **change})
+                               "live": live, **change})
                 events.add(None, "BIOS changed: " + zenduo_re.describe_atk_change(change))
+            # A live reading (the fan speed) moves on its own: not this step.
+            changes = [c for c in changes
+                       if int(c["device_id"], 16) not in zenduo_re.ATK_LIVE_IDS]
             if changes:
                 summary += "\n  " + paint("do", "BIOS changed: " + "; ".join(
                     zenduo_re.describe_atk_change(c) for c in changes))

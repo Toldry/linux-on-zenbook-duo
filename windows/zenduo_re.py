@@ -88,9 +88,15 @@ ATK_DEVICE_IDS = {
     0x00100023: "FNLOCK",
     0x00110011: "THERMAL_CTRL",
     0x00110012: "FAN_CTRL",
-    0x00110013: "CPU_FAN_CTRL",
+    0x00110013: "CPU_FAN_CTRL",          # a live reading: see ATK_LIVE_IDS
     0x00110018: "FAN_BOOST_MODE",
     0x00110019: "THROTTLE_THERMAL_POLICY_VIVO",
+    # Named from what MyASUS does with them (Windows capture, 2026-10-31),
+    # not from asus-wmi.h, which has no name for them.
+    0x00100021: "KEY_NOTIFY (MyASUS passes each vendor key code)",
+    0x0012008E: "SLEEP_ASSISTANT ?",
+    # GUESS (about 60 %) for "Memory Allocated to GPU"; asus-wmi.h names it.
+    0x000600C1: "APU_MEM",
     0x00110024: "CPU_FAN_CURVE",
     0x00120012: "PROCESSOR_STATE",
     0x00120031: "LID_RESUME",
@@ -105,6 +111,11 @@ ATK_DEVICE_IDS = {
     0x001200E2: "MCU_POWERSAVE",
     0x00130022: "BOOT_SOUND",
 }
+
+# Ids whose DSTS answer moves by itself, so a before/after read cannot pin
+# them on a step. CPU_FAN_CTRL changed after 37 of 80 steps in the
+# 2026-10-31 captures, idle ones included: the fan speed, not a setting.
+ATK_LIVE_IDS = {0x00110013}
 
 # DSTS result bits, same header.
 DSTS_STATUS_BIT = 0x00000001
@@ -203,7 +214,13 @@ HID_IOCTLS = {
     0x000B0195: "IOCTL_HID_SET_OUTPUT_REPORT",
     0x000B01A2: "IOCTL_HID_GET_INPUT_REPORT",
     0x000B01A0: "IOCTL_HID_GET_OUTPUT_REPORT",
+    # Enumeration, not traffic: MyASUS asks for every collection's
+    # descriptor when its pages open (seen 2026-10-31, over 1000 per minute
+    # while the light-sensor page is up).
+    0x000B01A8: "IOCTL_HID_GET_COLLECTION_INFORMATION",
+    0x000B0193: "IOCTL_HID_GET_COLLECTION_DESCRIPTOR",
 }
+HID_ENUMERATION_IOCTLS = {0x000B01A8, 0x000B0193}
 
 HANDSHAKE_TEXT = b"ASUS Tech.Inc."
 
@@ -217,20 +234,27 @@ KNOWN_FEATURE_PREFIXES = [
     (bytes([0x5A, 0xBA, 0xC5, 0xC4]), "keyboard backlight; next byte is the level"),
     (bytes([0x5A, 0xD0, 0x8F, 0x01]), "OOBE disable 3/4 (kb_init, guessed)"),
     (bytes([0x5A, 0xD0, 0x85, 0xFF]), "OOBE disable 4/4 (kb_init, guessed)"),
+    # What MyASUS sends (Windows capture, 2026-10-31, same bytes over USB and
+    # Bluetooth). The state byte follows the prefix: 1 on, 0 off.
+    (bytes([0x5A, 0xD0, 0x4E]), "Fn-lock state, set by the host"),
+    (bytes([0x5A, 0xD0, 0x7C]), "mic-mute LED, set by the host"),
+    (bytes([0x5A, 0xF4, 0x6B]), "touchpad toggle (the keyboard answers with Ctrl+Win+F24)"),
 ]
+STATE_PREFIXES = {bytes([0x5A, 0xD0, 0x4E]), bytes([0x5A, 0xD0, 0x7C])}
 
 # Vendor input codes (report 0x5a, second byte). Same sources; "?" = not
 # confirmed on this unit (watch_fn.py says which).
 KNOWN_VENDOR_CODES = {
     0x10: "brightness down",
     0x20: "brightness up",
-    0x3D: "status report, not a key (meaning unknown)",
+    0x3D: "status report, not a key (third byte: battery %? GUESS)",
     0x4E: "Fn-lock",
     0x6A: "second-screen key",
-    0x7C: "mic mute ?",
-    0x7E: "emoji ?",
-    0x86: "MyASUS key ?",
+    0x7C: "mic mute (F9)",
+    0x7E: "emoji (F11)",
+    0x86: "MyASUS key (F12)",
     0x9C: "bare F8 (split screen)",
+    0x9D: "Fn+F (fan profile)",
     0xC7: "keyboard backlight key",
 }
 
@@ -243,6 +267,8 @@ def describe_feature(data):
         if stripped.startswith(prefix.rstrip(b"\x00")):
             if prefix[:4] == bytes([0x5A, 0xBA, 0xC5, 0xC4]) and len(data) > 4:
                 return f"{meaning} (level {data[4]})"
+            if prefix in STATE_PREFIXES:
+                return f"{meaning}: {'on' if len(data) > 3 and data[3] else 'off'}"
             return meaning
     return "not in the known table: new"
 
@@ -255,6 +281,53 @@ def describe_vendor_input(data):
     if data[1] == 0x00:
         return "key release"
     return KNOWN_VENDOR_CODES.get(data[1], f"unknown vendor code 0x{data[1]:02x}")
+
+
+# Keyboard usages (HID Usage Tables 1.4, page 0x07) that carry what was typed:
+# letters, digits, Enter, Esc, Backspace, Tab, space, punctuation, and the
+# keypad. The rest (modifiers, F1-F24, arrows, PrtSc) say which shortcut was
+# sent, which is what a capture is for.
+TYPING_USAGES = set(range(0x04, 0x39)) | set(range(0x54, 0x64))
+MODIFIER_NAMES = ["Ctrl", "Shift", "Alt", "Win", "RCtrl", "RShift", "RAlt", "RWin"]
+
+
+def is_key_report(data):
+    """A boot-protocol keyboard report: modifiers, a zero byte, six usages."""
+    return len(data) == 8 and data[1] == 0 and data[0] != 0x5A
+
+
+def scrub_keystrokes(data):
+    """The report with the typed keys blanked; anything else unchanged.
+
+    The USB capture sees every key pressed on the docked keyboard, passwords
+    included. Captures are meant to be shared, so they keep the shortcut
+    (Ctrl+Win+F24) and lose the text.
+    """
+    data = bytes(data)
+    if not is_key_report(data):
+        return data
+    return data[:2] + bytes(0 if u in TYPING_USAGES else u for u in data[2:])
+
+
+def describe_key_report(data):
+    """'Ctrl+Win+F24', 'typing (hidden)' or 'all keys up' for a key report."""
+    data = bytes(data)
+    if not is_key_report(data):
+        return None
+    names = [name for bit, name in enumerate(MODIFIER_NAMES) if data[0] >> bit & 1]
+    hidden = False
+    for usage in data[2:]:
+        if 0x3A <= usage <= 0x45:
+            names.append(f"F{usage - 0x39}")
+        elif 0x68 <= usage <= 0x73:
+            names.append(f"F{usage - 0x68 + 13}")
+        elif usage in TYPING_USAGES:
+            hidden = True
+        elif usage:
+            names.append(f"usage 0x{usage:02x}")
+    if hidden:
+        names.append("typing (hidden)")
+    return "keys: " + "+".join(names) if names else "keys: all up"
 
 
 def decode_ioctl(code, in_bytes, out_bytes):

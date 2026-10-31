@@ -3,6 +3,7 @@ r"""Turn capture sessions into one timeline per action, with Linux equivalents.
     python3 analyze.py windows/captures/20261030-120000-hooks [more sessions...]
     python3 analyze.py --json timeline.json <sessions...>
     python3 analyze.py atk-diff before.json after.json   (two atk_query --json files)
+    python3 analyze.py scrub <sessions...>   blank typed keys in older .pcap files
 
 Runs anywhere (stdlib only): copy the captures folder to the Ubuntu side and
 read them there. Each session folder may hold markers.jsonl plus any of
@@ -171,10 +172,14 @@ def usb_events(packets):
                 if p["stage"] != 1:
                     finish(open_controls.pop(key))
         elif p["transfer"] == 1 and p["completion"] and p["endpoint"] & 0x80 and p["payload"]:
+            payload = zenduo_re.scrub_keystrokes(p["payload"])
+            if zenduo_re.is_key_report(payload) and not any(payload[2:]):
+                continue        # a release, a lone modifier, or blanked typing
+            key_report = zenduo_re.describe_key_report(payload)
             event = {"type": "usb", "ts": ts, "request": "INTERRUPT_IN",
-                     "endpoint": f"0x{p['endpoint']:02x}", "data": p["payload"].hex(),
+                     "endpoint": f"0x{p['endpoint']:02x}", "data": payload.hex(),
                      "where": where}
-            meaning = zenduo_re.describe_vendor_input(p["payload"])
+            meaning = key_report or zenduo_re.describe_vendor_input(payload)
             if meaning:
                 event["meaning"] = meaning
             events.append(event)
@@ -184,6 +189,40 @@ def usb_events(packets):
         event["device"] = devices.get(event["where"], "unknown")
         event["where"] = f"bus {event['where'][0]} device {event['where'][1]}"
     return [e for e in events if keep_usb_event(e)]
+
+
+def scrub_pcap(path):
+    """Blank the typed keys in a USBPcap capture, in place. Returns how many.
+
+    Only classic pcap, which is what USBPcapCMD writes. Interrupt-IN data of
+    every device is checked (an external keyboard types too); a mouse
+    report that happens to look like a key report loses a little movement.
+    """
+    with open(path, "rb") as f:
+        blob = bytearray(f.read())
+    if blob[:4] not in (b"\xd4\xc3\xb2\xa1", b"\x4d\x3c\xb2\xa1") or len(blob) < 24:
+        return 0
+    if struct.unpack_from("<I", blob, 20)[0] != LINKTYPE_USBPCAP:
+        return 0
+    scrubbed = 0
+    offset = 24
+    while offset + 16 <= len(blob):
+        caplen = struct.unpack_from("<I", blob, offset + 8)[0]
+        offset += 16
+        if offset + caplen > len(blob):
+            break
+        p = parse_usbpcap(bytes(blob[offset:offset + caplen]))
+        if p and p["transfer"] == 1 and p["endpoint"] & 0x80 and p["payload"]:
+            clean = zenduo_re.scrub_keystrokes(p["payload"])
+            if clean != p["payload"]:
+                start = offset + struct.unpack_from("<H", blob, offset)[0]
+                blob[start:start + len(clean)] = clean
+                scrubbed += 1
+        offset += caplen
+    if scrubbed:
+        with open(path, "wb") as f:
+            f.write(blob)
+    return scrubbed
 
 
 def keep_usb_event(event):
@@ -268,7 +307,7 @@ def linux_hints(events):
     """Unique Linux replays for the events of one group."""
     hints = []
     for event in events:
-        for line in event.get("linux", []):
+        for line in event.get("linux") or []:
             if line not in hints:
                 hints.append(line)
     return hints
@@ -289,8 +328,23 @@ def atk_diff(before_path, after_path):
     return lines
 
 
+def is_noise(event):
+    """Events that say nothing about the step they fall in."""
+    if event.get("api") == "CreateFileW":
+        return True
+    if event.get("api") == "DeviceIoControl" and \
+            event.get("code") in zenduo_re.HID_ENUMERATION_IOCTLS:
+        return True
+    return event.get("type") == "atk-change" and event.get("live", False)
+
+
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ["scrub"]:
+        for folder in argv[1:] or sys.exit("usage: analyze.py scrub <session folders>"):
+            for path in glob.glob(os.path.join(folder, "*.pcap")):
+                print(f"{path}: {scrub_pcap(path)} key reports blanked")
+        return 0
     if argv[:1] == ["atk-diff"]:
         if len(argv) != 3:
             sys.exit("usage: analyze.py atk-diff before.json after.json")
@@ -299,13 +353,14 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("sessions", nargs="+", help="capture session folders")
     parser.add_argument("--json", help="also write the grouped timeline here")
-    parser.add_argument("--quiet-opens", action="store_true", help="hide CreateFileW lines")
+    parser.add_argument("--quiet-opens", action="store_true",
+                        help="hide file opens, HID enumeration and live BIOS readings")
     args = parser.parse_args(argv)
     groups = timeline(args.sessions)
     for group in groups:
         print(f"\n== {group['label'] or '(before the first marker)'}")
         for event in group["events"]:
-            if args.quiet_opens and event.get("api") == "CreateFileW":
+            if args.quiet_opens and is_noise(event):
                 continue
             print("   " + describe(event))
         hints = linux_hints(group["events"])

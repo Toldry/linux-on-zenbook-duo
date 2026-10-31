@@ -95,6 +95,43 @@ class FakeKeys:
         return self.lines.pop(0) if self.lines else ""
 
 
+class Keystrokes(unittest.TestCase):
+    def test_typing_is_blanked_and_shortcuts_kept(self):
+        typed = bytes([0x02, 0, 0x04, 0x1E, 0, 0, 0, 0])            # Shift+a, 1
+        self.assertEqual(zenduo_re.scrub_keystrokes(typed), bytes([0x02, 0] + [0] * 6))
+        toggle = bytes.fromhex("0900730000000000")                  # Ctrl+Win+F24
+        self.assertEqual(zenduo_re.scrub_keystrokes(toggle), toggle)
+        self.assertEqual(zenduo_re.describe_key_report(toggle), "keys: Ctrl+Win+F24")
+        self.assertEqual(zenduo_re.describe_key_report(typed), "keys: Shift+typing (hidden)")
+        vendor = bytes.fromhex("5ac7000000000000")
+        self.assertEqual(zenduo_re.scrub_keystrokes(vendor), vendor)
+        self.assertIsNone(zenduo_re.describe_key_report(bytes.fromhex("5ac700000000")))
+
+    def test_scrub_pcap_in_place(self):
+        typed = bytes([0, 0, 0x28, 0, 0, 0, 0, 0])                  # Enter
+        packets = [(1.0, usbpcap_packet(1, True, 1, 3, 0x81, 1, typed)),
+                   (2.0, usbpcap_packet(2, True, 1, 3, 0x81, 1,
+                                        bytes.fromhex("0900730000000000")))]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "USBPcap1.pcap")
+            with open(path, "wb") as f:
+                f.write(pcap(packets))
+            self.assertEqual(analyze.scrub_pcap(path), 1)
+            data = [analyze.parse_usbpcap(raw)["payload"]
+                    for _, _, raw in analyze.read_packets(path)]
+            self.assertEqual(data[0], bytes(8))
+            self.assertEqual(data[1].hex(), "0900730000000000")
+            self.assertEqual(analyze.scrub_pcap(path), 0)
+
+    def test_new_feature_meanings(self):
+        self.assertEqual(zenduo_re.describe_feature(bytes.fromhex("5ad04e01") + bytes(12)),
+                         "Fn-lock state, set by the host: on")
+        self.assertEqual(zenduo_re.describe_feature(bytes.fromhex("5ad07c00") + bytes(12)),
+                         "mic-mute LED, set by the host: off")
+        self.assertEqual(zenduo_re.describe_vendor_input(bytes.fromhex("5a9d00000000")),
+                         "Fn+F (fan profile)")
+
+
 class Markers(unittest.TestCase):
     def run_steps(self, scenario, keys, **kwargs):
         with tempfile.TemporaryDirectory() as tmp:

@@ -192,6 +192,18 @@ py capture.py --scenario keyboard-docked
 py capture.py --scenario keyboard-bluetooth
 ```
 
+**The USB capture sees every key typed on the docked keyboard**, the
+Enter presses for the steps included. When it stops, `capture.py` blanks
+letters, digits, symbols and the keypad in the saved `.pcap` files and keeps
+only shortcuts (Ctrl+Win+F24, F-keys, modifiers), and `timeline.txt` hides
+typing too. Still, do not type a password during a run. Captures made
+before 2026-10-31 were not blanked; run this on their folders before
+sharing them:
+
+```powershell
+py analyze.py scrub captures\*
+```
+
 Before step 1, `capture.py` lists what it started: the hooks in the ASUS
 processes, the HID listener, the USB capture (run 1 only) and the WMI
 trace. A red ✗ line says what is missing and how to fix it. The rest still
@@ -201,8 +213,8 @@ Step 1 of each run puts the keyboard in place and waits until Windows sees
 it there. Every later step checks again. If the keyboard moves mid-run, for
 example if it slips off the pins, the step holds until it is back. The
 check reads the keyboard's ids (`0b05:1b2c` on USB, `0b05:1b2d` on
-Bluetooth) from Windows' device list. How Windows spells them there is
-**VERIFY-ON-HW**. If a keyboard step never ends although the keyboard is in
+Bluetooth) from Windows' device list (measured 2026-10-31: it saw both
+positions correctly). If a keyboard step never ends although the keyboard is in
 place, press Enter, and mention it in the issue.
 Over Bluetooth there is no USB capture, because nothing crosses the pins.
 Bluetooth commands are covered by the hooks, since they go through the same
@@ -279,8 +291,12 @@ be a step: the capture would stop at the restart. Do it by hand:
 1. In an Administrator PowerShell, in `windows\`, run:
 
    ```powershell
-   py atk_query.py --save before-gpu
+   py atk_query.py --range 0x00060000 0x000600ff --save before-gpu
    ```
+
+   The range reads every id in that block the BIOS answers for, so the
+   guess below does not need to be right. (A first try without it,
+   2026-10-31, read only the named ids and saw nothing.)
 
 2. In MyASUS > Device Settings > Power & Performance > Memory Allocated to
    GPU, pick a different amount. Note the old one.
@@ -393,10 +409,10 @@ What is known, what the kit assumes, and how sure that is.
 | # | Topic | Status today | How the kit settles it | Residual gap |
 |---|---|---|---|---|
 | 1 | Keyboard handshake on attach | Linux copies hid-asus and **guesses** the OOBE sequence (`kb_init.py`) | `capture.py`, `attach` | None if the capture is clean |
-| 2 | Backlight over Bluetooth | Same bytes as USB, refusals logged (HARDWARE.md) | `capture.py`, `keyboard-bluetooth` | On-air answers need BTVS |
-| 3 | Backlight idle timeout | Linux does it in `watch-fn` | `capture.py`, both keyboard scenarios (a 90 s hands-off step) | None |
-| 4 | Fn-lock | Code `4e` seen, state not set (PLAN Q) | `hook_asus` + `atk_query` diff | If it is keyboard firmware alone, nothing to send |
-| 5 | Codes `7c`, `7e`, `86`, `3d` | Mapped from hid-asus, unconfirmed | `capture.py`, both keyboard scenarios | Meaning of `3d`'s bytes: **GUESS** |
+| 2 | Backlight over Bluetooth | Windows sends the same `5a ba c5 c4` bytes over Bluetooth (measured 2026-10-31) | `capture.py`, `keyboard-bluetooth` | Whether the keyboard accepts them: on-air answers need BTVS |
+| 3 | Backlight idle timeout | Linux does it in `watch-fn`; no host write seen in 90 s on Windows (2026-10-31) | `capture.py`, both keyboard scenarios (a 90 s hands-off step) | Whether the shortest MyASUS time is under 90 s |
+| 4 | Fn-lock | Settled 2026-10-31: the host sends `5a d0 4e <0/1>` (HARDWARE.md) | Done | Linux has to send it (PLAN Q) |
+| 5 | Codes `7c`, `7e`, `86`, `3d` | `7c` F9, `7e` F11, `86` F12, `9d` Fn+F measured 2026-10-31 | `capture.py`, both keyboard scenarios | `3d`'s third byte as battery %: **GUESS, about 70 %** |
 | 6 | Fan profiles | `platform_profile` present, unwired (PLAN T) | `atk_query` diff, `hook_asus` | Fan curves set by a driver straight to the EC are invisible: see below |
 | 7 | Battery modes | `charge_control_end_threshold` works | `atk_query` diff | Whether MyASUS re-sends at each boot (hooks attach too late to see it) |
 | 8 | Speaker voicing | Fitted by ear and DMIC shape (`speaker_dsp.py`) | `speaker_response` | Mic colour; APO is level-dependent, so the curve is a slice |

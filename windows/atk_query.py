@@ -132,7 +132,8 @@ def main(argv=None):
             saved = json.load(f)
         before = {int(r["device_id"], 16): int(r["returned"], 16)
                   for r in saved if r.get("ioctl_ok") and "returned" in r}
-        changes = zenduo_re.atk_changes(before, reader.values(sorted(before)))
+        changes = [c for c in zenduo_re.atk_changes(before, reader.values(sorted(before)))
+                   if int(c["device_id"], 16) not in zenduo_re.ATK_LIVE_IDS]
         print("\n".join(zenduo_re.describe_atk_change(c) for c in changes)
               or f"nothing changed since '{args.compare}'")
         return 0

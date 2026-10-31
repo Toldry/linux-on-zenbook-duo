@@ -80,17 +80,18 @@ kept so code comments and the research stay cross-referenced.
 - **Vendor codes** (report id `0x5a`, second byte): `10` brightness down, `20`
   brightness up, `4e` Fn-lock, `6a` second-screen key, `c7` keyboard backlight
   (all confirmed on this unit, July 2026). Seen in the journal 2026-09-05 and
-  mapped by their mainline hid-asus meaning: `7c` mic mute, `7e` emoji picker
-  (**VERIFY-ON-HW** which keycaps; the legend says Fn+F9 and Fn+F11). `9c` is
+  mapped by their mainline hid-asus meaning: `7c` mic mute, `7e` emoji picker;
+  measured 2026-10-31 under Windows: `7c` is F9, `7e` is F11, `86` is F12,
+  `9d` is Fn+F (new: MyASUS cycles the fan profile on it). `9c` is
   bare F8, followed by `5a 00` on release (measured 2026-10-30, `duo
   fn-probe`). `3d` is not a key: it arrived 41 times on 2026-09-27, docked and
   over Bluetooth, often every 30 s or so and right after the keyboard
   connected, and on 2026-10-30 came as `5a 3d 05 09` / `5a 3d 06 09` with no
   key touched — a status report with a value in its third byte. `watch-fn`
-  logs an unknown code once per run. Bare F12 (the MyASUS legend) is
-  **VERIFY-ON-HW**: `watch-fn` expects `86`, the code mainline hid-asus maps
-  to KEY_PROG1 as "MyASUS key" (drivers/hid/hid-asus.c, read 2026-10-30),
-  not yet captured on this unit.
+  logs an unknown code once per run. Bare F12 (the MyASUS legend) sends `86`,
+  the code mainline hid-asus maps to KEY_PROG1 as "MyASUS key"
+  (drivers/hid/hid-asus.c, read 2026-10-30; captured under Windows
+  2026-10-31).
 - **Bare F7 types Super+P** on the ordinary keyboard report (`02 08 00 13`:
   modifier Left GUI, usage P), with no vendor report, so GNOME raises its
   display switcher (measured 2026-10-30, `duo fn-probe` and `duo
@@ -115,6 +116,62 @@ kept so code comments and the research stay cross-referenced.
   not advertise. Remove a stale Windows pairing first.
 - **Touchpad.** libinput's disable-while-typing only covers internal touchpads;
   the quirk `AttrTPKComboLayout=below` makes it treat the combo like one.
+
+## What MyASUS does (Windows capture, 2026-10-31)
+
+Measured with `windows/capture.py` (docs/WINDOWS-RE.md) on MyASUS 4.0.81.0,
+ASUS System Control Interface 3.1.73.0: hooks in the ASUS processes, the USB
+wire, the keyboard's vendor input, and a BIOS (DSTS) read after every step.
+One run each, docked and on Bluetooth (LE, HOGP: the path reads
+`{00001812-…}_Dev_VID&020b05_PID&1b2d`), and one of the power settings.
+The process doing all of it is `AsusOptimization.exe`.
+
+- **Every vendor key goes to the BIOS.** On each `5a <code>` input,
+  AsusOptimization calls ATK `DEVS 0x00100021 <code>`, and the ATK event
+  channel then returns the same code. The host does the rest; the keyboard
+  only reports the key.
+- **The keyboard backlight is host-driven.** F4 (`5a c7`) is answered by
+  `5a ba c5 c4 <level>`, cycling 1, 2, 3, 0. The same bytes go out over
+  Bluetooth through `HidD_SetFeature`, which returned success; whether the
+  light followed there is the user's observation (**VERIFY-ON-HW** until
+  noted). Choosing a backlight sleep mode in MyASUS sent nothing to the
+  keyboard, and nothing was sent during 90 s hands-off.
+- **Fn-lock is host state.** Fn+Esc (`5a 4e`) and the MyASUS "Function key"
+  option both send `5a d0 4e 01` (locked) / `5a d0 4e 00`, docked and on
+  Bluetooth. Nothing changes in the BIOS. This settles PLAN Q: Linux has to
+  keep the state and send it.
+- **Mic mute has an LED the host sets.** F9 (`5a 7c`) is answered by
+  `5a d0 7c 01` / `5a d0 7c 00`.
+- **Touchpad lock is a round trip.** MyASUS sends `5a f4 6b 00` (the same
+  bytes to lock and to unlock); the keyboard answers with the shortcut
+  Ctrl+Win+F24 on its ordinary key report, Windows' own touchpad toggle;
+  Windows then sets the precision touchpad's feature report `0x05` (input
+  mode / surface switch) to `00` (off) or `03` (on).
+- **Fan profile** is `THROTTLE_THERMAL_POLICY_VIVO` (`0x00110019`), written
+  with DEVS: Standard `0`, Whisper `1`, Performance `2`. Fn+F (`5a 9d`)
+  cycles Standard, Whisper, Performance. DSTS reads `0x02030000` for
+  Standard and `0x02030001` for both other modes, so it cannot tell Whisper
+  from Performance. Whether Linux's `platform_profile` names match these
+  numbers (asus-wmi has its own table for the Vivo id) is **VERIFY-ON-HW**:
+  set each profile on Linux and read the id back.
+- **Battery Care Mode** is `RSOC` (`0x00120057`) by DEVS: `0x50` (80 %) on,
+  `0x64` (100 %) off, the same as `charge_control_end_threshold`. **Instant
+  Full-Charge Mode** writes `0x80`; DSTS then reads `0x00890800` instead of
+  `0x00890000`, and switching it off writes `0x50` again.
+- **Sleep Assistant** writes `DEVS 0x0012008e 0x000a0201`, the same value to
+  switch on and off; only the second switch changed the DSTS answer
+  (`0x00010000` to `0x00010001`). What the value means is unknown.
+- **The second-screen key** (`5a 6a`), detached, makes AsusScreenPadMax
+  write `SCREENPAD_POWER` (`0x00050031`) 0 then 1. Docked, the screen is
+  under the keyboard and only a DSTS of `0x00050051` follows.
+- **`CPU_FAN_CTRL` (`0x00110013`) is a live reading** (it changed after
+  steps that touched nothing), not a setting.
+- **Status `5a 3d`** came as `5a 3d 63 00` over Bluetooth and `5a 3d 64 00`
+  docked the day before. **GUESS, about 70 %**: the third byte is the
+  keyboard's battery percentage (0x63 = 99, 0x64 = 100). That does not
+  explain `5a 3d 05 09`, seen on Linux.
+- **Not seen yet:** the attach handshake (the `attach` scenario was not run),
+  the display and audio settings.
 
 ## Displays
 

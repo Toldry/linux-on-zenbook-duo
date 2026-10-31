@@ -25,6 +25,7 @@ import argparse
 import glob
 import os
 import re
+import struct
 import subprocess
 import sys
 
@@ -98,6 +99,14 @@ class UsbCapture:
                 err = b""
             if process.returncode not in (0, 1, None) and err:
                 errors.append(err.decode(errors="replace").strip())
+        # The capture holds every key typed on the docked keyboard; blank the
+        # text before anyone shares the folder (analyze.scrub_pcap).
+        import analyze
+        for path in glob.glob(os.path.join(self.out, "*.pcap")):
+            try:
+                analyze.scrub_pcap(path)
+            except (OSError, struct.error, ValueError) as error:
+                errors.append(f"could not blank typed keys in {path}: {error}")
         return errors
 
 
