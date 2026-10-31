@@ -212,7 +212,12 @@ EOF
 chmod +x "$ll/bin/getent" "$ll/bin/setpriv"
 src="$ll/home/.config/monitors.xml" dst="$ll/gdm/.config/monitors.xml"
 good='<monitors version="2"><configuration><logicalmonitor><x>0</x></logicalmonitor></configuration></monitors>'
-login_layout() { ( PATH="$ll/bin:$PATH" SUDO_UID="$me_uid" ./helper/zenduo-helper login-layout ) >/dev/null 2>&1; echo $?; }
+# The helper sets its own PATH, so the copy under test gets one that finds
+# the stubs first.
+sed "s|^PATH=/usr/sbin:|PATH=$ll/bin:/usr/sbin:|" helper/zenduo-helper > "$ll/zenduo-helper"
+chmod +x "$ll/zenduo-helper"
+is "the copy under test finds the stubs" "$(grep -c "^PATH=$ll/bin:" "$ll/zenduo-helper")" 1
+login_layout() { ( SUDO_UID="$me_uid" "$ll/zenduo-helper" login-layout ) >/dev/null 2>&1; echo $?; }
 
 is "a missing file is 'nothing remembered' (66)"     "$(login_layout)" 66
 printf '%s\n' "$good" > "$src"
@@ -228,6 +233,13 @@ printf '%s\n' '<monitors version="2"><evil/></monitors>' > "$src"
 is "an unknown element is refused (65)"               "$(login_layout)" 65
 printf '%s\n' '<monitors version="2"><!-- x --></monitors>' > "$src"
 is "a comment is refused"                             "$(login_layout)" 65
+# Each of these got past a check that read only the leading letters of a name.
+for bad in '<monitor-x/>' '<x:y/>' '<x1/>' '<_x/>' '<*/>' '< x/>'; do
+  printf '%s\n' "<monitors version=\"2\">$bad</monitors>" > "$src"
+  is "the element $bad is refused"                    "$(login_layout)" 65
+done
+printf '<monitors version="2">\0<evil/></monitors>\n' > "$src"
+is "a NUL byte is refused (grep would see no elements)" "$(login_layout)" 65
 { printf '%s\n' '<monitors version="2">'; head -c 70000 /dev/zero | tr '\0' ' '; } > "$src"
 is "a file over 64 KiB is refused"                    "$(login_layout)" 65
 is "a refused file leaves the greeter's copy alone"   "$(grep -c '<x>0</x>' "$dst")" 1

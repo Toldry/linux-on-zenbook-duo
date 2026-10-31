@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # zenduo-helper — the ONLY zenduo code that runs as root (via the NOPASSWD
 # sudoers rule installed by system/50-sudoers.sh, scoped to exactly
 # this binary at /usr/local/sbin/zenduo-helper).
@@ -10,6 +10,12 @@
 #                                login screen's own copy, so the greeter comes up
 #                                on the monitor they last used
 set -euo pipefail
+# sudo keeps the caller's PATH when sudoers has no secure_path, and their
+# locale either way. Neither may decide which programs root runs or how the
+# checks below read bytes. (The shebang is a fixed path for the same reason:
+# `env bash` would search the caller's PATH.)
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH LC_ALL=C
 
 usage() {
   echo "usage: zenduo-helper backlight <device> <0-100> | batlimit <20-100>" >&2
@@ -19,8 +25,9 @@ usage() {
 
 # Every element name mutter's monitors.xml parser knows
 # (src/backends/meta-monitor-config-store.c, read 2026-09-12). A file is only
-# installed if it uses nothing else: the greeter's Mutter parses it as root's
-# own display config, so "it came from the user" is not on its own enough.
+# installed if it uses nothing else: the greeter's Mutter reads it as its own
+# display config, before anyone logs in, so "it came from the user" is not on
+# its own enough.
 XML_TAGS="monitors configuration logicalmonitor x y scale primary presentation
 transform rotation flipped monitor monitorspec connector vendor product serial
 mode width height rate ratemode flag underscanning maxbpc rgbrange disabled
@@ -83,6 +90,8 @@ case "${1:-}" in
       exit 66
     fi
     max="$(cat "$base/max_brightness")"
+    # Bash arithmetic evaluates a variable's text as an expression.
+    [[ "$max" =~ ^[0-9]{1,9}$ ]] || { echo "zenduo-helper: $base/max_brightness is not a number" >&2; exit 66; }
     echo $(( max * pct / 100 )) > "$base/brightness"
     ;;
   batlimit)
@@ -124,13 +133,13 @@ case "${1:-}" in
     # raced with a swap in between. So the file is read once, as the caller,
     # through a pipe into a directory only root can see. Every check below
     # and the install itself use that one copy.
-    as_user "$uid" "$gid" test -f "$src" \
+    as_user "$uid" "$gid" test -f "$src" </dev/null \
       || { echo "zenduo-helper: $src does not exist yet (nothing remembered)" >&2; exit 66; }
     work="$(mktemp -d)"
     trap 'rm -rf "$work"' EXIT
     copy="$work/monitors.xml"
     read_rc=0
-    as_user "$uid" "$gid" cat -- "$src" | timeout 10 head -c 65537 > "$copy" || read_rc=$?
+    as_user "$uid" "$gid" cat -- "$src" </dev/null | timeout 10 head -c 65537 > "$copy" || read_rc=$?
 
     # Validation, in the order that a bad file could do harm: a sane size, no
     # doctype/processing instruction/comment, and no element mutter does not
@@ -146,19 +155,26 @@ case "${1:-}" in
       '<monitors version="2">'*) ;;
       *) echo "zenduo-helper: $src does not start with <monitors version=\"2\"> — refusing" >&2; exit 65 ;;
     esac
+    # A NUL byte makes grep call the file binary and print no matches, which
+    # would let any element past the list below.
+    [ "$(tr -d '\000' < "$copy" | wc -c)" = "$size" ] \
+      || { echo "zenduo-helper: $src contains a NUL byte — refusing" >&2; exit 65; }
     # Captured, then matched: a pipe into grep -q under pipefail returns 141
     # on a file big enough to fill the pipe (docs/DESIGN.md).
-    specials="$(grep -c -e '<!' -e '<?' "$copy" || true)"
+    specials="$(grep -ac -e '<!' -e '<?' "$copy" || true)"
     [ "$specials" = 0 ] \
       || { echo "zenduo-helper: $src contains a doctype, comment or processing instruction — refusing" >&2; exit 65; }
-    tags="$(grep -oE '</?[a-zA-Z]+' "$copy" | tr -d '</' | sort -u)"
-    for tag in $tags; do
+    # The whole name after each "<" or "</", so "monitor-x" or "x:y" is not
+    # read as "monitor" or "x".
+    tags="$(grep -aoE '</?[^[:space:]/<>]*' "$copy" | sed -E 's#^</?##' | sort -u)"
+    # One name per line, never word-split: a name such as "*" must not glob.
+    while IFS= read -r tag; do
       found=0
       for known in $XML_TAGS; do
         [ "$tag" = "$known" ] && { found=1; break; }
       done
       [ "$found" = 1 ] || { echo "zenduo-helper: $src has an unknown element <$tag> — refusing" >&2; exit 65; }
-    done
+    done <<<"$tags"
 
     IFS=: read -r _ _ gdm_uid gdm_gid _ gdm_home _ <<<"$(getent passwd gdm 2>/dev/null || true)"
     [[ -n "$gdm_home" && "$gdm_uid" =~ ^[0-9]+$ && "$gdm_gid" =~ ^[0-9]+$ ]] \

@@ -94,11 +94,13 @@ system_half() {
   # the greeter's own file if it had one; remove ours if it did not.
   # This runs as gdm, like the helper that wrote the files. Root renaming and
   # removing files in gdm's own directory would follow a symlink gdm left there.
+  # It starts in / with nothing on stdin: gdm can open the working directory
+  # of its own processes through /proc, and here that would be this checkout.
   local gdm_uid gdm_gid gdm_home gdm_done
   IFS=: read -r _ _ gdm_uid gdm_gid _ gdm_home _ <<<"$(getent passwd gdm 2>/dev/null || true)"
   if [ -n "$gdm_home" ]; then
     # shellcheck disable=SC2016 # the script expands its own $1, as gdm
-    gdm_done="$(setpriv --reuid="$gdm_uid" --regid="$gdm_gid" --init-groups --no-new-privs -- bash -c '
+    gdm_done="$(cd / && setpriv --reuid="$gdm_uid" --regid="$gdm_gid" --init-groups --no-new-privs -- bash -c '
       set -eu
       d="$1/.config"
       if [ -e "$d/monitors.xml.zenduo-backup" ]; then
@@ -108,7 +110,7 @@ system_half() {
       elif [ -e "$d/monitors.xml.zenduo-installed" ]; then
         rm -f -- "$d/monitors.xml" "$d/monitors.xml.zenduo-installed"
         echo removed
-      fi' uninstall "$gdm_home")"
+      fi' uninstall "$gdm_home" </dev/null)"
     case "$gdm_done" in
       restored) log "restored the login screen's own monitors.xml" ;;
       removed) log "removed the login screen layout this project installed" ;;
