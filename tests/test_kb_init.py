@@ -102,3 +102,50 @@ class Descriptor(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Targets(unittest.TestCase):
+    """Only the vendor interface is opened over USB: the udev rule gives the
+    session no other one, and interface 0 carries every key typed."""
+
+    def test_usb_opens_the_vendor_interface_alone(self):
+        from unittest import mock
+        nodes = ["/dev/hidraw4", "/dev/hidraw5", "/dev/hidraw8", "/dev/hidraw9"]
+        with mock.patch.object(kb_init, "keyboard_hidraw_nodes", lambda: iter(nodes)), \
+                mock.patch.object(kb_init, "declared_feature_size",
+                                  lambda n, rid: 16 if n == "/dev/hidraw8" else None):
+            self.assertEqual(kb_init.target_nodes(), ["/dev/hidraw8"])
+
+    def test_without_a_declared_vendor_report_every_node(self):
+        # Bluetooth: one node holds every collection.
+        from unittest import mock
+        with mock.patch.object(kb_init, "keyboard_hidraw_nodes", lambda: iter(["/dev/hidraw5"])), \
+                mock.patch.object(kb_init, "declared_feature_size", lambda n, rid: None):
+            self.assertEqual(kb_init.target_nodes(), ["/dev/hidraw5"])
+
+    def test_bluetooth_access_follows_the_installed_rule(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            rules = os.path.join(d, "70-zenduo.rules")
+            self.assertFalse(kb_init.bluetooth_access_off(rules), "no rule: not second-guessed")
+            with open(rules, "w") as f:
+                f.write('SUBSYSTEM=="hidraw", DEVPATH=="*:1.4/0003:0B05:1B2C.*", TAG+="uaccess"\n')
+            self.assertTrue(kb_init.bluetooth_access_off(rules))
+            with open(rules, "a") as f:
+                f.write('SUBSYSTEM=="hidraw", KERNELS=="0005:0B05:1B2D.*", TAG+="uaccess"\n')
+            self.assertFalse(kb_init.bluetooth_access_off(rules))
+
+    def test_the_shipped_rule_opens_interface_4_only(self):
+        # The rule as system/45-udev.sh writes it, against the six interface
+        # paths measured on this keyboard (2026-10-31). udev globs with
+        # fnmatch and no FNM_PATHNAME, so "*" crosses "/".
+        import re
+        from fnmatch import fnmatchcase
+        here = os.path.dirname(os.path.abspath(__file__))
+        with open(os.path.join(here, "..", "system", "45-udev.sh")) as f:
+            script = f.read()
+        pat = re.search(r'DEVPATH=="([^"]+)"', script).group(1)
+        base = "/devices/pci0000:00/0000:00:14.0/usb3/3-6/3-6:1.{i}/0003:0B05:1B2C.000{h}/hidraw/hidraw{n}"
+        hits = [i for i in range(6) if fnmatchcase(base.format(i=i, h=5 + i, n=4 + i), pat)]
+        self.assertEqual(hits, [4])
+        self.assertNotIn('KERNELS=="0003:0B05:1B2C.*", TAG+="uaccess"', script)

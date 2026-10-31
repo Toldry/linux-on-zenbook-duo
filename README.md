@@ -123,7 +123,14 @@ sudo ./install.sh --system --no-psr-fix          # keep Panel Self Refresh on
 sudo ./install.sh --system --no-palm-rejection
 sudo ./install.sh --system --no-amp-check
 sudo ./install.sh --system --no-hwe-kernel        # Ubuntu: leave the kernel alone
+sudo ./install.sh --system --bluetooth-fn         # Fn keys over Bluetooth too (see below)
 ```
+
+The Fn keys and the keyboard backlight work docked out of the box. Over
+Bluetooth they are off by default. There the keyboard has one HID node for
+everything, typing included, so `--bluetooth-fn` lets any program you run
+read what you type on it. Docked, the session only gets the vendor
+interface (USB interface 4), which carries the Fn keys and no typing.
 
 The speaker chain is opt-in — the numbers are measured on one unit and
 documented, but taste is yours:

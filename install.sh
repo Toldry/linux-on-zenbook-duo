@@ -17,6 +17,9 @@
 #   --no-psr-fix           don't add i915.enable_psr=0 (OLED flicker fix)
 #   --no-palm-rejection    don't install the libinput touchpad quirk
 #   --no-amp-check         don't install the CS35L41 speaker-amp reporter
+#   --bluetooth-fn         Fn keys and keyboard backlight over Bluetooth too. Off by
+#                          default: there the keyboard has one node, so programs you
+#                          run can then read what you type on it
 #   --no-watch-displays    don't run the dock policy daemon
 #   --no-watch-fn          don't run the keyboard hotkey daemon
 #   --watch-backlight      also run the bottom-panel backlight sync daemon
@@ -62,7 +65,7 @@ while [ $# -gt 0 ]; do
     --dry-run|-n)        DRY_RUN=1; SYSTEM_FLAGS+=(--dry-run); USER_FLAGS+=(--dry-run) ;;
     --force)             FORCE=1; SYSTEM_FLAGS+=(--force) ;;
     --prefix)            [ $# -ge 2 ] || die "--prefix needs a directory"; PREFIX="$2"; SYSTEM_FLAGS+=(--prefix "$2"); USER_FLAGS+=(--prefix "$2"); shift ;;
-    --hwe-kernel|--no-hwe-kernel|--psr-fix|--no-psr-fix|--palm-rejection|--no-palm-rejection|--amp-check|--no-amp-check)
+    --hwe-kernel|--no-hwe-kernel|--psr-fix|--no-psr-fix|--palm-rejection|--no-palm-rejection|--amp-check|--no-amp-check|--bluetooth-fn|--no-bluetooth-fn)
                          SYSTEM_FLAGS+=("$1") ;;
     --watch-displays)    WATCH_DISPLAYS=1; USER_FLAGS+=("$1") ;;
     --no-watch-displays) WATCH_DISPLAYS=0; USER_FLAGS+=("$1") ;;

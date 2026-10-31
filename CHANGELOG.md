@@ -34,6 +34,26 @@
   streams: `pw-metadata -n settings 0 clock.min-quantum 1024` re-opens the
   device, where restarting PipeWire takes Wine and FMOD clients down with it
 
+### Security
+
+- `duo layout login` (the root helper's `login-layout`) checked
+  `~/.config/monitors.xml` and then opened it again as root to copy it. A
+  program running as you could swap in a symlink to `/etc/shadow` between
+  the two, and root copied it into the greeter's world-readable file. Now the
+  file is read once, as you, and that copy is checked and installed. Every
+  write in gdm's home runs as gdm, and the element check reads whole names
+  and refuses NUL bytes
+- the udev rule gave your session every HID node of the keyboard, including
+  the one that carries typing, so any program could read what you typed. Now
+  it is USB interface 4 only, the vendor one. Over Bluetooth the keyboard has
+  one node for everything, so access there is opt-in: `--bluetooth-fn`. Run
+  `sudo ./install.sh --system` to replace the old rule; `duo doctor` warns
+  while it is still in place
+- the helper sets its own `PATH` and locale; `uninstall.sh` starts its gdm
+  step in `/`; the `/tmp` fallback for the display override is used only
+  when you own it; Bluetooth device names are printed without control
+  characters; the flake-update workflow pins every action by commit
+
 ### Fixes
 
 - The screen's Recent problems no longer fills up with `unmapped-0x3d`. A key

@@ -21,7 +21,7 @@ usage_text() {
   cat <<'USAGE'
 usage: run.sh [--dry-run] [--force] [--dev] [--prefix DIR] [--user NAME]
               [--hwe-kernel|--no-hwe-kernel] [--no-psr-fix] [--no-palm-rejection]
-              [--no-amp-check]
+              [--no-amp-check] [--bluetooth-fn]
 USAGE
 }
 
@@ -40,6 +40,8 @@ while [ $# -gt 0 ]; do
     --no-palm-rejection) ZENDUO_PALM_REJECTION=0 ;;
     --amp-check)         ZENDUO_AMP_CHECK=1 ;;
     --no-amp-check)      ZENDUO_AMP_CHECK=0 ;;
+    --bluetooth-fn)      ZENDUO_BLUETOOTH_FN=1 ;;
+    --no-bluetooth-fn)   ZENDUO_BLUETOOTH_FN=0 ;;
     -h|--help)           usage_text; exit 0 ;;
     *) die "unknown argument: $1 ($(usage_text))" ;;
   esac
@@ -51,6 +53,7 @@ export ZENDUO_FORCE="${ZENDUO_FORCE:-0}" ZENDUO_DEV="${ZENDUO_DEV:-0}"
 export ZENDUO_TARGET_USER="${ZENDUO_TARGET_USER:-}"
 export ZENDUO_HWE_KERNEL="${ZENDUO_HWE_KERNEL:-}" ZENDUO_PSR_FIX="${ZENDUO_PSR_FIX:-}"
 export ZENDUO_PALM_REJECTION="${ZENDUO_PALM_REJECTION:-}" ZENDUO_AMP_CHECK="${ZENDUO_AMP_CHECK:-}"
+export ZENDUO_BLUETOOTH_FN="${ZENDUO_BLUETOOTH_FN:-}"
 
 require_root
 log "zenduo $(cat "$ZENDUO_SRC/VERSION" 2>/dev/null || echo dev) — system layer   dry run: $DRY_RUN   prefix: $ZENDUO_PREFIX"

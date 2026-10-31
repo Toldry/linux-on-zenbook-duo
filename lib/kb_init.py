@@ -181,17 +181,48 @@ def keyboard_hidraw_nodes():
             yield "/dev/" + uevent.split("/")[4]
 
 
+def target_nodes():
+    """The keyboard nodes worth opening, as a list.
+
+    Over USB that is the vendor interface alone, found by its descriptor.
+    The udev rule opens no other USB interface to the session: interface 0
+    is the keyboard itself, and reading it means reading every key typed.
+    Over Bluetooth every collection shares one node, so it is that node.
+    """
+    nodes = list(keyboard_hidraw_nodes())
+    vendor = [n for n in nodes if declared_feature_size(n, REPORT_IDS[0])]
+    return vendor or nodes
+
+
+UDEV_RULES = "/etc/udev/rules.d/70-zenduo.rules"
+
+
+def bluetooth_access_off(rules=UDEV_RULES):
+    """True when the installed udev rule leaves the Bluetooth node to root.
+
+    That is the default (system/45-udev.sh, --bluetooth-fn): on Bluetooth
+    the Fn keys and the typing share a node. False when there is no rule to
+    read, so a machine set up some other way is not second-guessed.
+    """
+    try:
+        with open(rules) as f:
+            text = f.read().upper()
+    except OSError:
+        return False
+    return "0005:0B05:1B2D" not in text
+
+
 def send_handshake(hint=True, verbose=True):
     """verbose=False keeps the failure lines to the caller: watch-fn retries
     and says so itself, scaled to how long it has been failing."""
-    nodes = list(keyboard_hidraw_nodes())
+    nodes = target_nodes()
     if not nodes:
         if verbose:
             print("kb_init: keyboard 0b05:1b2c not found on hidraw (docked?)", file=sys.stderr)
         return 1
 
-    # Send the handshake to EVERY interface, not just the first that accepts it.
-    # hid-asus targets the interface that carries the ASUS vendor collection
+    # Send the handshake to every target node, not just the first that accepts
+    # it. hid-asus targets the interface that carries the ASUS vendor collection
     # (on this keyboard that is a later hidraw node, not the main keyboard one),
     # so we must not stop early or the media layer never switches on.
     denied = False
@@ -262,8 +293,12 @@ def send_handshake(hint=True, verbose=True):
         return 0
     if denied:
         if verbose:
-            print("kb_init: permission denied on hidraw — run with sudo, or install the "
-                  "udev rule (sudo ./install.sh --system).", file=sys.stderr)
+            if all(over_bluetooth(n) for n in nodes) and bluetooth_access_off():
+                print("kb_init: the keyboard is on Bluetooth, where its node is root's by default; "
+                      "dock it, or see --bluetooth-fn in ./install.sh --help.", file=sys.stderr)
+            else:
+                print("kb_init: permission denied on hidraw — run with sudo, or install the "
+                      "udev rule (sudo ./install.sh --system).", file=sys.stderr)
         return 13
     if missing and missing == len(nodes):
         if verbose:

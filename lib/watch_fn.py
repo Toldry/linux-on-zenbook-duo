@@ -314,11 +314,24 @@ def main():
                 os.close(fd)
             fds = {}
             nodes = settled_nodes(kb_init.keyboard_hidraw_nodes)
+            if nodes and all(kb_init.over_bluetooth(n) for n in nodes) and kb_init.bluetooth_access_off():
+                # Decided from the installed rule, not from a failed open: the
+                # ACL lands a moment after the node appears, so a refusal on
+                # the first try means nothing.
+                log("keyboard on Bluetooth: Fn keys work docked; over Bluetooth they are off "
+                    "unless installed with --bluetooth-fn (that lets programs you run read "
+                    "what is typed on it)")
+                known = nodes
+                failures, retry_at = 0, 0.0
+                continue
             if nodes:
                 log(f"keyboard present on {' '.join(nodes)} — sending init")
                 rc = kb_init.send_handshake(hint=False, verbose=False)
                 vanished = []
-                for n in nodes:
+                # The vendor interface only, where there is one: the 0x5a
+                # reports arrive there, and the other nodes are not ours to read.
+                vendor = set(kb_init.target_nodes())
+                for n in [n for n in nodes if n in vendor] or nodes:
                     try:
                         fds[os.open(n, os.O_RDONLY | os.O_NONBLOCK)] = n
                     except FileNotFoundError:
