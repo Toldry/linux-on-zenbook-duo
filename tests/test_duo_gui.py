@@ -19,7 +19,8 @@ class Glance(unittest.TestCase):
         g = dm.Glance(model="UX8406MA", keyboard="docked",
                       panels=[("eDP-1", "connected", "enabled"), ("eDP-2", "connected", "disabled")],
                       backlights=[("intel_backlight", 60), ("card1-eDP-2-backlight", None)],
-                      battery_now="80")
+                      battery_now="80", laptop_battery=(57, "Charging"),
+                      kb_battery="99 % (Bluetooth)")
         for k, v in kw.items():
             setattr(g, k, v)
         return dict((key, value) for key, _title, value in dg.glance_rows(g))
@@ -29,6 +30,8 @@ class Glance(unittest.TestCase):
         self.assertEqual(rows["top"], "on")
         self.assertEqual(rows["bottom"], "off")
         self.assertEqual(rows["battery"], "80 %")
+        self.assertEqual(rows["laptop-battery"], "57 %, charging")
+        self.assertEqual(rows["kb-battery"], "99 % (Bluetooth)")
         self.assertEqual(rows["backlight"], "intel_backlight 60 %, card1-eDP-2-backlight ?")
         self.assertTrue(rows["keyboard"].startswith("docked"))
         self.assertNotIn("override", rows)
@@ -39,6 +42,8 @@ class Glance(unittest.TestCase):
         self.assertEqual(rows["bottom"], "?")
         self.assertEqual(rows["backlight"], "none")
         self.assertIn("not supported", rows["battery"])
+        self.assertEqual(self.glance(laptop_battery=None)["laptop-battery"], "no battery found")
+        self.assertEqual(self.glance(kb_battery="")["kb-battery"], "unknown")
 
     def test_a_manual_override_is_shown(self):
         self.assertIn("override", self.glance(override={"set": "both"}))

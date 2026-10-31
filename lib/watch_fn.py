@@ -47,6 +47,7 @@ import kb_init  # noqa: E402  (same directory; shares node discovery + handshake
 import kb_backlight  # noqa: E402  (same directory; owns the remembered level)
 import dock  # noqa: E402  (same directory; keyboard dock state)
 import uinput_keys  # noqa: E402  (same directory; virtual brightness keys)
+import battery  # noqa: E402  (same directory; where the keyboard's 5a 3d report is kept)
 
 DUO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                     "..", "bin", "duo-cli"))
@@ -533,6 +534,8 @@ def main():
                 # seconds forever would poke the device far harder than intended.
                 if rc == 0 and fds:
                     known = nodes
+                    # A new connection: the last one's battery report is stale.
+                    battery.clear_status()
                     failures, retry_at = 0, 0.0
                     # The keyboard is back and initialised: give it its
                     # backlight back rather than leaving it dark until the
@@ -575,6 +578,8 @@ def main():
                 dispatcher.wake_backlight()
                 if is_vendor and actions.get(data[1]) == "kbd-backlight":
                     continue  # the press that wakes the backlight only wakes it
+            if is_vendor and data[1] == battery.STATUS_CODE:
+                battery.save_status(data)  # the window reads it: lib/battery.py
             if is_vendor and data[1] != 0:
                 code = data[1]
                 dispatcher.dispatch(code, actions.get(code, f"unmapped-0x{code:02x}"))

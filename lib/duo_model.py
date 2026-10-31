@@ -38,6 +38,7 @@ AMP_CHECK = "/usr/local/sbin/duo-cs35l41-check"
 
 sys.path.insert(0, HERE)
 import audio_probe  # noqa: E402  (same directory)
+import battery  # noqa: E402
 import dock  # noqa: E402
 import kb_backlight  # noqa: E402
 import monitors_xml  # noqa: E402
@@ -458,6 +459,8 @@ class Glance:
     kb_level: int = 0
     battery_node: str = ""
     battery_now: str = ""
+    laptop_battery: tuple = None                     # (percent, sysfs status) or None
+    kb_battery: str = ""                             # battery.keyboard_text()
     memory_sets: int = -1                            # -1 = unreadable
     login_state: str = ""
     helper: bool = False
@@ -498,6 +501,7 @@ def read_glance():
     node = _glob_first("/sys/class/power_supply/BAT*/charge_control_end_threshold")
     g.battery_node = node
     g.battery_now = _read(node) if node else ""
+    g.laptop_battery = battery.laptop()
     # Any failure here is "unreadable", not a dead screen: seen 2026-09-17 with
     # a python whose expat could not load (an LD_LIBRARY_PATH pointing at an
     # older libexpat), which is an ImportError, not a FormatError.
@@ -623,6 +627,7 @@ class Model:
         self.version = 0
         self.amp_state = ""
         self._amp_at = 0.0
+        self.kb_upower = None  # battery.keyboard_upower(), from the slow pass
         self.bluetooth, self.realtime = [], []
         self.errors = []       # reader failures, shown once each
         self._lock = threading.Lock()
@@ -640,6 +645,9 @@ class Model:
 
     def refresh_fast(self):
         g = read_glance()
+        g.kb_battery = battery.keyboard_text(
+            battery.keyboard_reachable(), battery.keyboard_sysfs(),
+            self.kb_upower, battery.load_status())
         g.amp_state = self.amp_state
         g.bluetooth, g.realtime = self.bluetooth, self.realtime
         self.glance = g
@@ -654,6 +662,8 @@ class Model:
             self.amp_state = read_amp_state()
             self._amp_at = now
         self.glance.amp_state = self.amp_state
+        # UPower is a subprocess, so it is asked here, not every second.
+        self.kb_upower = battery.keyboard_upower()
         # pw-dump and three systemctl calls: cheap, and the profile is what
         # turns a game's sound into a phone call, so it belongs on Overview.
         self.bluetooth = audio_probe.bluetooth_profiles(audio_probe.read_pw_dump())
