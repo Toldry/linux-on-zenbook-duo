@@ -885,7 +885,7 @@ feature_desc() {
     psr-fix)        echo "i915.enable_psr=0 on the kernel command line (OLED flicker)" ;;
     palm-rejection) echo "libinput quirk so disable-while-typing covers the detachable touchpad" ;;
     amp-check)      echo "notify when the CS35L41 speaker amps fail to power up" ;;
-    bluetooth-fn)   echo "Fn keys over Bluetooth too (programs you run can then read what is typed on it)" ;;
+    bluetooth-fn)   echo "Fn keys over Bluetooth too (programs you run can then read what anyone types on it)" ;;
     *) echo "" ;;
   esac
 }

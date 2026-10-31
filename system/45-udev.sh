@@ -35,7 +35,7 @@ EOF_RULES
 if feature_on BLUETOOTH_FN 0; then
   RULES+=$'\n'"# --bluetooth-fn: the Bluetooth keyboard's only node, typing included."
   RULES+=$'\n''SUBSYSTEM=="hidraw", KERNELS=="0005:0B05:1B2D.*", TAG+="uaccess"'
-  log "Bluetooth Fn keys on: programs you run can read what is typed on the keyboard while it is on Bluetooth"
+  log "Bluetooth Fn keys on: programs you run can read what is typed on the keyboard while it is on Bluetooth, by you or by another account after a user switch"
 else
   log "Bluetooth Fn keys off: they work docked; --bluetooth-fn turns them on over Bluetooth too"
 fi

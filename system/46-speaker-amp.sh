@@ -170,7 +170,7 @@ notify_once() {
     notify-send -u critical -a "Speaker amplifiers" \
       "Speakers are running unprotected" \
       "The CS35L41 amplifiers failed to power up this boot, so audio will sound harsh and distorted. Fix: shut down fully (not a reboot). To stop it recurring, run 'powercfg /h off' as Administrator in Windows to disable Fast Startup." \
-    >/dev/null 2>&1 || true
+    </dev/null >/dev/null 2>&1 || true
 }
 
 report() {

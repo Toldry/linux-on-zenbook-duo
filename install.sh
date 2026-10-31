@@ -19,7 +19,8 @@
 #   --no-amp-check         don't install the CS35L41 speaker-amp reporter
 #   --bluetooth-fn         Fn keys and keyboard backlight over Bluetooth too. Off by
 #                          default: there the keyboard has one node, so programs you
-#                          run can then read what you type on it
+#                          run can then read what is typed on it, by you or by another
+#                          account after a user switch
 #   --no-watch-displays    don't run the dock policy daemon
 #   --no-watch-fn          don't run the keyboard hotkey daemon
 #   --watch-backlight      also run the bottom-panel backlight sync daemon
@@ -33,7 +34,8 @@
 #
 # Other:
 #   --dev                  link the system install to THIS checkout instead of
-#                          copying it, so edits are live (developers)
+#                          copying it, so edits are live (developers). Anyone who
+#                          runs duo, and `sudo duo`, then runs files you can edit
 #   --prefix DIR           install under DIR instead of /usr/local
 #   --dry-run              print what would change, change nothing
 #   --force                proceed on hardware that is not a Zenbook Duo

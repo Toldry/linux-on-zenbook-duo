@@ -75,7 +75,7 @@ FEATURES = [
     Feature("psr-fix", "i915.enable_psr=0 on the kernel command line (OLED flicker)", scope="system", flag="psr-fix"),
     Feature("palm-rejection", "libinput quirk so disable-while-typing covers the detachable touchpad", scope="system", flag="palm-rejection"),
     Feature("amp-check", "notify when the CS35L41 speaker amps fail to power up", scope="system", flag="amp-check"),
-    Feature("bluetooth-fn", "Fn keys over Bluetooth too (programs you run can then read what is typed on it)",
+    Feature("bluetooth-fn", "Fn keys over Bluetooth too (programs you run can then read what anyone types on it)",
             scope="system", flag="bluetooth-fn"),
 ]
 

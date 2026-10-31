@@ -129,7 +129,8 @@ sudo ./install.sh --system --bluetooth-fn         # Fn keys over Bluetooth too (
 The Fn keys and the keyboard backlight work docked out of the box. Over
 Bluetooth they are off by default. There the keyboard has one HID node for
 everything, typing included, so `--bluetooth-fn` lets any program you run
-read what you type on it. Docked, the session only gets the vendor
+read what is typed on it. That includes another account's password after a
+user switch, since a node that is already open stays open. Docked, the session only gets the vendor
 interface (USB interface 4), which carries the Fn keys and no typing.
 
 The speaker chain is opt-in — the numbers are measured on one unit and
