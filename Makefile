@@ -59,6 +59,10 @@ lint:
 	@# The trap that shipped three times: a pipe into grep -q under pipefail.
 	@if grep -nE '\|[[:space:]]*grep[[:space:]]+-[a-zA-Z]*q' bin/duo-cli install.sh uninstall.sh lib/conf.sh system/*.sh | grep -v '^[^:]*:[0-9]*:[[:space:]]*#'; then \
 	  echo "^ never pipe into grep -q (see docs/DESIGN.md) — capture, then match" >&2; exit 1; fi
+	@# python -c puts the working directory first on the import path, and the
+	@# user may be standing in /tmp. Run it from /.
+	@if grep -nE '(python3?|PYGI"?)[[:space:]]+-c[[:space:]]' bin/duo-cli install.sh uninstall.sh system/*.sh | grep -v 'cd / &&'; then \
+	  echo "^ run python -c from / ( cd / && python3 -c ... ): the working directory is on its import path" >&2; exit 1; fi
 
 preset:
 	$(PYTHON) lib/speaker_dsp.py preset > presets/easyeffects/duo-speakers.json

@@ -200,12 +200,14 @@ override_active() { # -> prints the overriding connectors, or nothing
   fi
   local f="$d/zenduo/display-override.json"
   [ -r "$f" ] || return 1
-  python3 -c 'import json,sys
+  # Every `python -c` here runs from /: it puts the working directory first on
+  # the import path, and that may be /tmp with another account's json.py in it.
+  ( cd / && python3 -c 'import json,sys
 try:
     doc = json.load(open(sys.argv[1]))
 except Exception:
     sys.exit(1)
-print(("docked" if doc.get("docked") else "undocked") + ": " + ", ".join(doc.get("want", [])))' "$f" 2>/dev/null
+print(("docked" if doc.get("docked") else "undocked") + ": " + ", ".join(doc.get("want", [])))' "$f" 2>/dev/null )
 }
 
 have_user_systemd() { systemctl --user show-environment >/dev/null 2>&1; }
@@ -381,7 +383,7 @@ cmd_doctor() {
   else
     ck WARN 0 "no session bus/gdbus — skipping Mutter check (TTY?)"
   fi
-  if [ -x "$PYGI" ] && "$PYGI" -c 'import gi' >/dev/null 2>&1; then
+  if [ -x "$PYGI" ] && ( cd / && "$PYGI" -c 'import gi' ) >/dev/null 2>&1; then
     ck PASS 0 "PyGObject importable by $PYGI"
   else
     ck WARN 0 "PyGObject missing for $PYGI — install python3-gi (sudo ./install.sh --system does)"
@@ -409,7 +411,7 @@ cmd_doctor() {
   # Only the vendor interface should be open to the session: the others
   # include the keyboard itself, so reading one is reading every key typed.
   local u hid_found=0 node vendor open_vendor="" open_other=""
-  vendor=" $(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import kb_init; print(" ".join(kb_init.target_nodes()))' "$LIB" 2>/dev/null || true) "
+  vendor=" $(cd / && python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import kb_init; print(" ".join(kb_init.target_nodes()))' "$LIB" 2>/dev/null || true) "
   for u in /sys/class/hidraw/hidraw*/device/uevent; do
     [ -r "$u" ] || continue
     if grep -qi "0000${KBD_VID}:0000${KBD_PID}" "$u" 2>/dev/null; then
