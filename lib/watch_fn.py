@@ -26,6 +26,9 @@ This daemon closes the loop:
       split-screen   -> `duo theme toggle` (F8_DARK_MODE=1), else `duo swap-screens`
                         as Windows does (bare F8)
       myasus         -> `duo gui --toggle`, the duo window (bare F12)
+  - marks F7, which arrives as an ordinary Super+P typed in one report, so
+    the Super+P shortcut (`duo super-p`) opens the terminal for F7 and GNOME's
+    display switcher for a Super+P typed by hand (lib/hotkeys.py)
   - honors ~/.config/zenduo/fn-map.json (from `duo fn-map`) as overrides, so
     newly-captured codes map onto actions without touching this file
   - on Bluetooth, darkens the keyboard backlight after KB_BACKLIGHT_IDLE_OFF
@@ -48,6 +51,7 @@ import kb_backlight  # noqa: E402  (same directory; owns the remembered level)
 import dock  # noqa: E402  (same directory; keyboard dock state)
 import uinput_keys  # noqa: E402  (same directory; virtual brightness keys)
 import battery  # noqa: E402  (same directory; where the keyboard's 5a 3d report is kept)
+import hotkeys  # noqa: E402  (same directory; tells F7 from a typed Super+P)
 
 DUO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                     "..", "bin", "duo-cli"))
@@ -72,7 +76,8 @@ DEFAULT_ACTIONS = {
     0x7E: "emoji",
     # Measured 2026-10-30 with `duo fn-probe`: three bare F8 presses sent
     # `5a 9c` then `5a 00` each, and nothing else. Bare F7 sends no vendor
-    # report at all, only a typed Super+P (see lib/hotkeys.py).
+    # report at all, only a typed Super+P in one report, which ChordWatch
+    # tells from a hand-typed one (lib/hotkeys.py).
     0x9C: "split-screen",
     # Bare F12 carries the MyASUS legend. 0x86 is the code mainline hid-asus
     # maps to KEY_PROG1 with the comment "MyASUS key" (drivers/hid/hid-asus.c,
@@ -510,6 +515,7 @@ def main():
     clocks = None
     failures, retry_at = 0, 0.0
     alarm, battery_at = battery.LowAlarm(), 0.0
+    chords = hotkeys.ChordWatch()
     log(f"started (actions: {len(actions)} codes; map overrides honored)")
     while True:
         dispatcher.reap()
@@ -599,6 +605,8 @@ def main():
                 known = None  # rescan, and report whichever state is found
                 continue
             is_vendor = len(data) >= 2 and data[0] == VENDOR_REPORT_ID
+            if chords.is_f7(fds.get(fd), data):
+                hotkeys.mark_f7()  # `duo super-p` reads it: terminal, not the switcher
             if counts_as_typing(data, actions) and idle.key(time.monotonic()):
                 dispatcher.wake_backlight()
                 if is_vendor and actions.get(data[1]) == "kbd-backlight":

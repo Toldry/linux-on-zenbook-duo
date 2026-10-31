@@ -72,10 +72,10 @@ LOGIN_SCREEN_LAYOUT=1
 TOUCH_MAPPING=1
 
 # F7 opens a terminal instead of raising GNOME's display switcher (Ctrl+Alt+T
-# keeps working). F7 types a literal Super+P, so a hand-typed Super+P opens one
-# too; `duo layout cycle` still steps the layouts. Applied by ./install.sh
+# keeps working). F7 types a literal Super+P; watch-fn tells the two apart, so
+# a Super+P typed by hand still raises the switcher. Applied by ./install.sh
 # --user, or by hand with `duo hotkeys apply` (`duo hotkeys remove` undoes it).
-# 0 = GNOME's switcher.
+# 0 = GNOME's switcher for both.
 F7_TERMINAL=1
 
 # F8 toggles light/dark style, as Settings → Appearance does. Read by watch-fn.

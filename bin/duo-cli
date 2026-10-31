@@ -131,8 +131,10 @@ usage: duo-cli <command>        (duo <command> runs the same thing)
   gui [--toggle]         the same things in a GNOME window (GTK 4 + libadwaita);
                          --toggle closes it when it is focused (what F12 runs)
   hotkeys apply|remove|show
-                         F7 (which types Super+P) opens a terminal instead of
-                         GNOME's display switcher, or gets the switcher back
+                         F7 (which types Super+P) opens a terminal while a
+                         typed Super+P keeps GNOME's display switcher, or
+                         gets the switcher back for both
+  super-p                what Super+P runs: the terminal for F7, else the switcher
   terminal               open the default terminal (what F7 runs)
   kb-init                switch the keyboard into hotkey mode (enables Fn/media keys)
   watch-fn               daemon: init keyboard on connect + act on media keys
@@ -1088,6 +1090,7 @@ case "$cmd" in
   gui)                exec "$PYGI" "$LIB/duo_gui.py" "$@" ;;
   hotkeys)            cmd_hotkeys "$@" ;;
   terminal)           exec python3 "$LIB/terminal.py" "$@" ;;
+  super-p)            exec python3 "$LIB/hotkeys.py" super-p ;;
   kb-init)            cmd_kb_init "$@" ;;
   watch-fn)           cmd_watch_fn "$@" ;;
   kb-backlight)       cmd_kb_backlight "$@" ;;
