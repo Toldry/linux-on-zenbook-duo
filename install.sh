@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # install.sh — one-command setup of linux-on-zenbook-duo.
 #
-#   git clone https://github.com/JowiAoun/linux-on-zenbook-duo ~/linux-on-zenbook-duo
+#   git clone https://github.com/Toldry/linux-on-zenbook-duo ~/linux-on-zenbook-duo
 #   cd ~/linux-on-zenbook-duo
 #   ./install.sh                       # asks for sudo once; idempotent, re-run any time
 #

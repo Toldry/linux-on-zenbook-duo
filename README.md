@@ -8,7 +8,7 @@ Bluetooth, the speakers get the voicing they have under Windows, the battery
 charge limit sticks, the touchpad rejects your palm while you type, and the
 OLED flicker is gone.
 
-[![ci](https://github.com/JowiAoun/linux-on-zenbook-duo/actions/workflows/ci.yml/badge.svg)](https://github.com/JowiAoun/linux-on-zenbook-duo/actions/workflows/ci.yml)
+[![ci](https://github.com/Toldry/linux-on-zenbook-duo/actions/workflows/ci.yml/badge.svg)](https://github.com/Toldry/linux-on-zenbook-duo/actions/workflows/ci.yml)
 
 > **Status:** in daily use since July 2026 on Ubuntu 24.04 (GNOME, Wayland),
 > extracted from a personal dotfiles repo in September 2026. Pre-1.0: the
@@ -16,6 +16,15 @@ OLED flicker is gone.
 > have a Duo, please try it and open an issue with `duo report` attached —
 > the goal is to support as many Duos, distros and desktops as possible.
 > See [docs/PLAN.md](docs/PLAN.md) for where this is going.
+
+> **This is a fork** of
+> [JowiAoun/linux-on-zenbook-duo](https://github.com/JowiAoun/linux-on-zenbook-duo).
+> Since October 2026 it has added the GNOME window (`duo gui`, F12), Fn-lock,
+> the mic-mute light and Fn+F as MyASUS does them, F8 swapping windows
+> between the panels, and a kit for watching what the ASUS software does on
+> Windows ([docs/WINDOWS-RE.md](docs/WINDOWS-RE.md)). Its goal is the same
+> Windows parity, pursued by copying what MyASUS does; [CHANGELOG.md](CHANGELOG.md)
+> lists every change.
 
 ## What works
 
@@ -59,7 +68,7 @@ is in [docs/FEATURES.md](docs/FEATURES.md).
 
 ```bash
 sudo apt install -y git            # the one prerequisite on Ubuntu
-git clone https://github.com/JowiAoun/linux-on-zenbook-duo ~/linux-on-zenbook-duo
+git clone https://github.com/Toldry/linux-on-zenbook-duo ~/linux-on-zenbook-duo
 cd ~/linux-on-zenbook-duo
 ./install.sh                       # asks for your password once; safe to re-run
 ```
@@ -323,7 +332,7 @@ duo log                    follow the zenduo journal
 The repo is a flake. The package runs on any machine with Nix:
 
 ```bash
-nix run github:JowiAoun/linux-on-zenbook-duo -- doctor
+nix run github:Toldry/linux-on-zenbook-duo -- doctor
 ```
 
 The home-manager module generates the same user units and config
@@ -333,7 +342,7 @@ a checkout — home-manager cannot write udev rules):
 ```nix
 # flake.nix
 inputs.zenbook-duo = {
-  url = "github:JowiAoun/linux-on-zenbook-duo";
+  url = "github:Toldry/linux-on-zenbook-duo";
   inputs.nixpkgs.follows = "nixpkgs";
 };
 # a home-manager module
@@ -349,8 +358,8 @@ inputs.zenbook-duo = {
 ```
 
 All options: [nix/home-manager.nix](nix/home-manager.nix). A full host example:
-[nix/examples/host.nix](nix/examples/host.nix). This is how the author's
-dotfiles ([JowiAoun/dome](https://github.com/JowiAoun/dome)) consume it.
+[nix/examples/host.nix](nix/examples/host.nix). This is how the upstream
+author's dotfiles ([JowiAoun/dome](https://github.com/JowiAoun/dome)) consume it.
 
 ## Troubleshooting
 

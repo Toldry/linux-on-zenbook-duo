@@ -1,5 +1,5 @@
 # The `duo` screen, the `duo-cli` command and their daemons as a Nix package. The home-manager module uses
-# it by default; `nix run github:JowiAoun/linux-on-zenbook-duo -- doctor` works
+# it by default; `nix run github:Toldry/linux-on-zenbook-duo -- doctor` works
 # on any machine with Nix.
 #
 # What the wrapper does, and why:
@@ -52,7 +52,7 @@ stdenvNoCC.mkDerivation {
 
   meta = with lib; {
     description = "Dual-screen, keyboard, audio and power support for the ASUS Zenbook Duo (2024) UX8406MA";
-    homepage = "https://github.com/JowiAoun/linux-on-zenbook-duo";
+    homepage = "https://github.com/Toldry/linux-on-zenbook-duo";
     license = licenses.mit;
     platforms = [ "x86_64-linux" ];
     mainProgram = "duo";

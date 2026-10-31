@@ -226,7 +226,7 @@ sed -i "s|@TARGET_USER@|$DUO_USER|" "$tmp_check"
 cat > "$tmp_unit" <<'UNIT'
 [Unit]
 Description=Report Zenbook Duo CS35L41 speaker amplifier power-up failures
-Documentation=https://github.com/JowiAoun/linux-on-zenbook-duo
+Documentation=https://github.com/Toldry/linux-on-zenbook-duo
 After=sound.target
 Wants=sound.target
 

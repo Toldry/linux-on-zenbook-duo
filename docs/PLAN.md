@@ -2,9 +2,16 @@
 
 **Goal.** Give the ASUS Zenbook Duo (2024) the functionality it has under
 Windows, on Linux, as one installable project that anyone can put on their
-machine and customise feature by feature — and keep the author's dotfiles
-repo ([dome](https://github.com/JowiAoun/dome)) clean by having it consume
-this project instead of carrying it.
+machine and customise feature by feature. Where Windows behaviour comes from
+ASUS's own software (MyASUS, the keyboard and Fn-key handling), copy what
+that software is observed to do ([WINDOWS-RE.md](WINDOWS-RE.md)) rather
+than guess.
+
+This repository is a fork of
+[JowiAoun/linux-on-zenbook-duo](https://github.com/JowiAoun/linux-on-zenbook-duo).
+Part 1 below is upstream's history: it split the project out of its author's
+dotfiles ([dome](https://github.com/JowiAoun/dome)) so they could consume it.
+Part 2 is this fork's roadmap.
 
 **How to read this.** Part 1 (A–L) is the extraction and the standalone
 install; it is what the 0.9.0 release is. Part 2 (M–Z) is the roadmap to 1.0

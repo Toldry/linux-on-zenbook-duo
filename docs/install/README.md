@@ -54,7 +54,7 @@ Violation` the first time — expected: OK → Enroll key from disk → `VTOYEFI
 session; fetch the repo instead:
 
 ```bash
-wget https://github.com/JowiAoun/linux-on-zenbook-duo/archive/refs/heads/main.tar.gz
+wget https://github.com/Toldry/linux-on-zenbook-duo/archive/refs/heads/main.tar.gz
 tar xf main.tar.gz
 bash linux-on-zenbook-duo-main/bin/duo-cli doctor | tee ~/doctor-live.txt
 ```
@@ -98,7 +98,7 @@ survives detach. **Anything MUST-fails: power off.** Nothing was written.
 4. Install this project:
    ```bash
    sudo apt install -y git
-   git clone https://github.com/JowiAoun/linux-on-zenbook-duo ~/linux-on-zenbook-duo
+   git clone https://github.com/Toldry/linux-on-zenbook-duo ~/linux-on-zenbook-duo
    cd ~/linux-on-zenbook-duo && ./install.sh
    ```
    Reboot (kernel and GRUB changed). `cat /proc/cmdline` contains

@@ -1,6 +1,6 @@
 # home-manager module: the user half of linux-on-zenbook-duo, declaratively.
 #
-#   inputs.zenbook-duo.url = "github:JowiAoun/linux-on-zenbook-duo";
+#   inputs.zenbook-duo.url = "github:Toldry/linux-on-zenbook-duo";
 #   ...
 #   imports = [ inputs.zenbook-duo.homeManagerModules.default ];
 #   zenduo = { enable = true; batteryLimit = 80; speakerDsp = true; };
@@ -31,6 +31,7 @@ let
     "ZENDUO_REMEMBER_LAYOUT=${bool01 cfg.rememberLayout}"
     "ZENDUO_LOGIN_SCREEN_LAYOUT=${bool01 cfg.loginScreenLayout}"
     "ZENDUO_TOUCH_MAPPING=${bool01 cfg.touchMapping}"
+    "ZENDUO_F8_DARK_MODE=${bool01 cfg.f8DarkMode}"
     "ZENDUO_F12_GUI=${bool01 cfg.f12Gui}"
   ];
 
@@ -65,6 +66,8 @@ let
     REMEMBER_LAYOUT=${bool01 cfg.rememberLayout}
     LOGIN_SCREEN_LAYOUT=${bool01 cfg.loginScreenLayout}
     TOUCH_MAPPING=${bool01 cfg.touchMapping}
+    F7_TERMINAL=${bool01 cfg.f7Terminal}
+    F8_DARK_MODE=${bool01 cfg.f8DarkMode}
     F12_GUI=${bool01 cfg.f12Gui}
   '';
 in
@@ -214,6 +217,23 @@ in
       description = "Init the keyboard's hotkey mode on connect and act on its media keys (brightness, panel toggle, kb backlight). Mainline hid-asus lacks this device, so this daemon stands in for it.";
     };
 
+    f7Terminal = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        F7 opens a terminal instead of GNOME's display switcher. F7 types
+        Super+P, so this moves Super+P from Mutter's switch-monitor to a custom
+        shortcut running `duo terminal`, at activation, as ./install.sh does.
+        Turning it off later does not undo that: run `duo hotkeys remove`.
+      '';
+    };
+
+    f8DarkMode = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "F8 toggles light/dark style. Off: F8 swaps the windows between the panels, as under Windows (needs swapScreens). Read by watchFn.";
+    };
+
     f12Gui = lib.mkOption {
       type = lib.types.bool;
       default = true;
@@ -290,6 +310,13 @@ in
     home.activation.zenduoSwapScreens = lib.mkIf cfg.swapScreens
       (lib.hm.dag.entryAfter [ "linkGeneration" ] ''
         run ${cfg.package}/bin/duo-cli swap-screens --enable || true
+      '');
+
+    # GNOME's own keybinding settings, as ./install.sh writes them; without a
+    # session bus gsettings fails and `duo hotkeys apply` does it later.
+    home.activation.zenduoF7Terminal = lib.mkIf cfg.f7Terminal
+      (lib.hm.dag.entryAfter [ "linkGeneration" ] ''
+        run ${cfg.duoBin} hotkeys apply || true
       '');
 
     systemd.user.services =

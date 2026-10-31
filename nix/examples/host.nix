@@ -2,7 +2,7 @@
 #
 # flake.nix:
 #   inputs.zenbook-duo = {
-#     url = "github:JowiAoun/linux-on-zenbook-duo";
+#     url = "github:Toldry/linux-on-zenbook-duo";
 #     inputs.nixpkgs.follows = "nixpkgs";
 #   };
 #   ...

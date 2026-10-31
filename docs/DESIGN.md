@@ -27,13 +27,29 @@ home-manager module generates the same units declaratively and marks them
   `systemctl --user`. It has no knowledge of its own: if the screen can do
   something the command line cannot, that is a bug. Stdlib curses, no other
   dependency, and every view renders to text (`duo --snapshot`) so it is
-  tested without a terminal.
+  tested without a terminal. Since 2026-10-31 it is the **diagnostic**
+  surface: it keeps showing state and the controls it has, for SSH and a live
+  USB where GTK is missing, but new controls go to the window and to
+  `duo-cli` only. A new reading (a battery level, a fan mode) may still get a
+  row here; a new settings page does not.
 - **The window** (`lib/duo_gui.py`, `duo gui`, F12) is the screen's twin in
   GTK 4 and libadwaita, on the same Model, under the same rule: it reads
   through duo_model and acts through duo-cli. What to show is decided in
   plain functions above `make_app()`, tested without a display; the GTK
   classes only lay those answers out. One instance per session, so F12 can
   close the window it opened.
+
+Three names, on purpose: the repository is `linux-on-zenbook-duo`, the
+command is `duo` (`duo-cli` underneath), and everything that needs a unique
+prefix on the system is `zenduo`: the helper, `~/.config/zenduo/`, the
+journal tag, the `ZENDUO_*` environment, the units' descriptions. Renaming
+any `zenduo` path would orphan existing installs, so new things take the
+same prefix.
+
+Settings (`KNOBS`) and user features (`FEATURES`) are defined in
+`lib/duo_model.py` and repeated in `lib/conf.sh`, the example config,
+`bin/duo-cli`, `install.sh`, the unit templates and the home-manager module.
+`tests/test_declarations.py` fails until a new one is in all of them.
 
 ## Rules
 

@@ -77,7 +77,7 @@ Legend: ⛔ = hard gate, do not pass on a failure.
 - [ ] E4 `manage-bde -status C:` → Protection On (re-enable if not)
 - [ ] E5 Ubuntu: `sudo apt update && sudo apt full-upgrade`
 - [ ] E6 `uname -r` = 6.17.x · `timedatectl` RTC in UTC
-- [ ] E7 `git clone https://github.com/JowiAoun/linux-on-zenbook-duo ~/linux-on-zenbook-duo && cd ~/linux-on-zenbook-duo`
+- [ ] E7 `git clone https://github.com/Toldry/linux-on-zenbook-duo ~/linux-on-zenbook-duo && cd ~/linux-on-zenbook-duo`
 - [ ] E8 `./install.sh` → reboot → `cat /proc/cmdline` has `i915.enable_psr=0`; GRUB Advanced lists 6.8.x fallback
 - [ ] E9 Suspend 2 min → resumes, Wi-Fi back
 - [ ] E10 `duo doctor` on the installed system; compare with `doctor-live.txt`
