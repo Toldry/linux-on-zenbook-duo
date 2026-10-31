@@ -3,8 +3,8 @@
 #   - hidraw access (uaccess ACL for the logged-in user) to the detachable
 #     keyboard's vendor interface over USB (0b05:1b2c), and with --bluetooth-fn
 #     to its Bluetooth node (0b05:1b2d) — used by kb-backlight/kb-init/fn-*
-#   - group-writable native kbd-backlight LED node, if/when the kernel grows
-#     one for this device (see docs/HARDWARE.md, V8)
+#   - a world-writable native kbd-backlight LED node (any local account can
+#     set the level), if/when the kernel grows one (see docs/HARDWARE.md, V8)
 #
 # Note: these are permission-only rules. Display toggling deliberately does
 # NOT react to udev add/remove events (event-storm hazard, V14) — the watcher

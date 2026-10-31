@@ -124,7 +124,9 @@ def candidate_sizes(node):
     sizes = []
     declared = declared_feature_size(node, REPORT_IDS[0])
     for n in (declared, 17, 16):
-        if n and n not in sizes:
+        # A descriptor can declare up to 1024 bytes and more; past 64 is not
+        # this keyboard, and ioctl refuses such a buffer with ValueError.
+        if n and n <= 64 and n not in sizes:
             sizes.append(n)
     return sizes
 
