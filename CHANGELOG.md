@@ -2,17 +2,6 @@
 
 ## Unreleased
 
-### Popups for Fn+Esc and Fn+F, and Fn+F sets only the fan mode
-
-- Fn+Esc and Fn+F show GNOME's own popup ("Fn lock on", "Fan mode:
-  Whisper"), as MyASUS shows one. The GNOME Shell extension that swaps the
-  screens draws it and is renamed `duo@zenduo.github.io`; the installer
-  replaces the old one
-- Fn+F now sets only the BIOS fan mode (`duo fan-profile`, through the root
-  helper's new `thermal` verb), as MyASUS does, instead of a
-  power-profiles-daemon profile, which also changed the CPU's energy
-  preference. Run `sudo ./install.sh --system` once for the helper
-
 ### An Extras tab for what Windows does not do
 
 - `duo gui` moves F7 opens a terminal, F8 switches dark mode and the dark
