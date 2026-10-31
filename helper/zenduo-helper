@@ -148,7 +148,7 @@ case "${1:-}" in
     # the caller could read anyway, so these checks are what guard the greeter.
     size="$(stat -c %s "$copy")"
     [[ "$size" -gt 0 && "$size" -le 65536 ]] \
-      || { echo "zenduo-helper: $src is empty or over 65536 bytes — refusing" >&2; exit 65; }
+      || { echo "zenduo-helper: $src is empty or over 65536 bytes; refusing" >&2; exit 65; }
     [ "$read_rc" = 0 ] || { echo "zenduo-helper: could not read $src (rc=$read_rc)" >&2; exit 65; }
     head_line="$(head -c 64 "$copy" | head -n1)"
     case "$head_line" in
@@ -158,7 +158,7 @@ case "${1:-}" in
     # A NUL byte makes grep call the file binary and print no matches, which
     # would let any element past the list below.
     [ "$(tr -d '\000' < "$copy" | wc -c)" = "$size" ] \
-      || { echo "zenduo-helper: $src contains a NUL byte — refusing" >&2; exit 65; }
+      || { echo "zenduo-helper: $src contains a NUL byte; refusing" >&2; exit 65; }
     # Captured, then matched: a pipe into grep -q under pipefail returns 141
     # on a file big enough to fill the pipe (docs/DESIGN.md).
     specials="$(grep -ac -e '<!' -e '<?' "$copy" || true)"
