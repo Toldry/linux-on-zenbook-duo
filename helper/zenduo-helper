@@ -6,6 +6,9 @@
 # Verbs (input strictly validated, nothing else accepted):
 #   backlight <device> <0-100>   write a percentage to /sys/class/backlight/<device>
 #   batlimit <20-100>            set BAT* charge_control_end_threshold
+#   thermal <quiet|balanced|performance>
+#                                set platform_profile, asus-wmi's name for the
+#                                BIOS fan mode MyASUS sets on Fn+F
 #   login-layout [--quiet]       copy the caller's ~/.config/monitors.xml to the
 #                                login screen's own copy, so the greeter comes up
 #                                on the monitor they last used
@@ -13,6 +16,7 @@ set -euo pipefail
 
 usage() {
   echo "usage: zenduo-helper backlight <device> <0-100> | batlimit <20-100>" >&2
+  echo "       zenduo-helper thermal <quiet|balanced|performance>" >&2
   echo "       zenduo-helper login-layout [--quiet]" >&2
   exit 64
 }
@@ -63,6 +67,17 @@ case "${1:-}" in
       found=1
     done
     [ "$found" = 1 ] || { echo "zenduo-helper: no charge_control_end_threshold node (asus-wmi missing?)" >&2; exit 66; }
+    ;;
+  thermal)
+    profile="${2:-}"
+    case "$profile" in quiet|balanced|performance) ;; *) usage ;; esac
+    node=/sys/firmware/acpi/platform_profile
+    [ -w "$node" ] || { echo "zenduo-helper: no $node (asus-wmi missing?)" >&2; exit 66; }
+    choices="$(cat /sys/firmware/acpi/platform_profile_choices 2>/dev/null || true)"
+    case " $choices " in
+      *" $profile "*) echo "$profile" > "$node" ;;
+      *) echo "zenduo-helper: $profile is not offered here (choices: $choices)" >&2; exit 65 ;;
+    esac
     ;;
   login-layout)
     quiet=0

@@ -57,15 +57,11 @@ class FnRow(unittest.TestCase):
         d.dispatch(0x4E, "fn-lock")
         self.assertEqual(d.spawned, [[watch_fn.DUO, "fn-lock", "toggle"]])
 
-    def test_fn_f_steps_the_power_profile_in_myasus_order(self):
+    def test_fn_f_steps_the_fan_mode_not_the_power_profile(self):
         self.assertEqual(watch_fn.DEFAULT_ACTIONS[0x9D], "fan-profile")
-        self.assertEqual([watch_fn.next_profile(p) for p in
-                          ("balanced", "power-saver", "performance", "", "odd")],
-                         ["power-saver", "performance", "balanced", "balanced", "balanced"])
         d = Recorder()
-        d.outputs = {"powerprofilesctl": "balanced\n"}
         d.dispatch(0x9D, "fan-profile")
-        self.assertEqual(d.spawned, [["powerprofilesctl", "set", "power-saver"]])
+        self.assertEqual(d.spawned, [[watch_fn.DUO, "fan-profile", "next"]])
 
     def test_reconnect_restores_fn_lock_and_the_mic_led(self):
         d = Recorder()

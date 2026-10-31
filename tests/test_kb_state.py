@@ -20,8 +20,13 @@ class KbState(unittest.TestCase):
             kb_state.kb_backlight, "send_vendor_report",
             side_effect=lambda payload, what, tag: self.sent.append(payload) or 0)
         self.send.start()
+        self.popups = []
+        self.osd = mock.patch.object(kb_state.shell_ext, "osd",
+                                     side_effect=lambda icon, label: self.popups.append(label))
+        self.osd.start()
 
     def tearDown(self):
+        self.osd.stop()
         self.send.stop()
         self.env.stop()
         self.tmp.cleanup()
@@ -39,6 +44,10 @@ class KbState(unittest.TestCase):
         kb_state.main(["fn-lock", "toggle"])
         self.assertFalse(kb_state.read_fn_lock())
         self.assertEqual([p[3] for p in self.sent], [1, 0])
+        # Fn+Esc runs toggle; MyASUS shows a popup for it, a plain set does not.
+        self.assertEqual(self.popups, ["Fn lock on", "Fn lock off"])
+        kb_state.main(["fn-lock", "on"])
+        self.assertEqual(len(self.popups), 2)
 
     def test_restore_sends_only_when_on(self):
         self.assertEqual(kb_state.main(["fn-lock", "--restore"]), 0)

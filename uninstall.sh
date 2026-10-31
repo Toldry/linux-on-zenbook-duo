@@ -53,14 +53,16 @@ user_half() {
       rm -f "$launcher"; log "removed $launcher"
     fi
   fi
-  local ext="${XDG_DATA_HOME:-$HOME/.local/share}/gnome-shell/extensions/swap-screens@zenduo.github.io"
-  if [ -e "$ext" ]; then
+  local ext
+  for ext in duo@zenduo.github.io swap-screens@zenduo.github.io; do
+    ext="${XDG_DATA_HOME:-$HOME/.local/share}/gnome-shell/extensions/$ext"
+    [ -e "$ext" ] || continue
     if nix_managed "$ext"; then
       warn "$(basename "$ext") is managed by home-manager — remove it there"
     else
       rm -rf "$ext"; log "removed $ext (GNOME drops it at the next login)"
     fi
-  fi
+  done
   # Super+P back to GNOME's display switcher, unless it is there already.
   case "$(python3 lib/hotkeys.py show 2>/dev/null)" in
     ""|*"display switcher"*) ;;

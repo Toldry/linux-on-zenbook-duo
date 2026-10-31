@@ -20,7 +20,8 @@ This daemon closes the loop:
       mic-mute       -> `wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle`, then the
                         key's LED set to match (`duo mic-led`)
       fn-lock        -> `duo fn-lock toggle`: the F-row swap is host state
-      fan-profile    -> power-profiles-daemon, in MyASUS's Fn+F order (Fn+F)
+      fan-profile    -> `duo fan-profile next`: the BIOS fan mode, in MyASUS's
+                        order, with its popup (Fn+F)
       emoji          -> `ibus emoji` (the picker GNOME's Ctrl+; opens)
       split-screen   -> `duo theme toggle` (F8_DARK_MODE=1), else `duo swap-screens`
                         as Windows does (bare F8)
@@ -83,13 +84,6 @@ DEFAULT_ACTIONS = {
     0x9D: "fan-profile",
 }
 
-# MyASUS's Fn+F order (Windows capture, 2026-10-31): Standard, Whisper,
-# Performance, back to Standard. The names are power-profiles-daemon's, which
-# GNOME's power menu shows; it drives platform_profile underneath. Which
-# platform_profile value lands on which BIOS mode is asus-wmi's table:
-# VERIFY-ON-HW (HARDWARE.md says how).
-PROFILE_CYCLE = ["balanced", "power-saver", "performance"]
-
 # Actions from a fn-map.json we know how to perform (everything else logged).
 # The actions dispatch() acts on.
 HANDLED = {"brightness-down", "brightness-up", "kbd-backlight", "second-screen",
@@ -100,13 +94,6 @@ KNOWN_ACTIONS = {"brightness-down", "brightness-up", "fn-lock", "second-screen",
                  "kbd-backlight", "mute", "volume-down", "volume-up",
                  "mic-mute", "display-switch", "split-screen", "camera-toggle",
                  "emoji", "myasus", "fan-profile"}
-
-
-def next_profile(current):
-    """The profile Fn+F moves to from `current` (balanced when unknown)."""
-    if current not in PROFILE_CYCLE:
-        return PROFILE_CYCLE[0]
-    return PROFILE_CYCLE[(PROFILE_CYCLE.index(current) + 1) % len(PROFILE_CYCLE)]
 
 
 def log(msg):
@@ -343,10 +330,9 @@ class Dispatcher:
             # sends it (5a d0 4e, as MyASUS does: HARDWARE.md).
             self.spawn([DUO, "fn-lock", "toggle"])
         elif action == "fan-profile":
-            current = (self.output(["powerprofilesctl", "get"]) or "").strip()
-            target = next_profile(current)
-            log(f"power profile {current or '?'} -> {target}")
-            self.spawn(["powerprofilesctl", "set", target])
+            # The fan mode alone, as MyASUS sets it: not power-profiles-daemon,
+            # whose profiles also move the CPU's energy preference.
+            self.spawn([DUO, "fan-profile", "next"])
 
 
 def idle_off_seconds():

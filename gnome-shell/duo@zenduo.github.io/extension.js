@@ -1,22 +1,32 @@
-// Swap the windows of the two built-in panels: what F8 does under Windows
-// (reported by the owner, 2026-10-31). Under Wayland only the compositor can
-// move another program's window, so this lives inside GNOME Shell and offers
-// one D-Bus method on the Shell's own connection; `duo swap-screens` calls it.
+// What linux-on-zenbook-duo needs from inside GNOME Shell, offered as D-Bus
+// methods on the Shell's own connection; lib/shell_ext.py calls them.
+//
+// SwapScreens: swap the windows of the two built-in panels, what F8 does
+// under Windows (reported by the owner, 2026-10-31). Under Wayland only the
+// compositor can move another program's window.
+// ShowOsd: the popup GNOME shows for volume and brightness, for the keys
+// MyASUS answers with one (Fn+Esc, Fn+F). org.gnome.Shell.ShowOSD would do,
+// but GNOME has refused it to other programs since 41.
 //
 //   gdbus call --session --dest org.gnome.Shell \
-//     --object-path /io/github/zenduo/SwapScreens \
-//     --method io.github.zenduo.SwapScreens.Swap
+//     --object-path /io/github/zenduo/Shell \
+//     --method io.github.zenduo.Shell.ShowOsd input-keyboard-symbolic 'Fn lock on'
 
 import Gio from 'gi://Gio';
 import Meta from 'gi://Meta';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
-const OBJECT_PATH = '/io/github/zenduo/SwapScreens';
+const OBJECT_PATH = '/io/github/zenduo/Shell';
 const INTERFACE = `
 <node>
-  <interface name="io.github.zenduo.SwapScreens">
-    <method name="Swap">
+  <interface name="io.github.zenduo.Shell">
+    <method name="SwapScreens">
       <arg type="u" direction="out" name="moved"/>
+    </method>
+    <method name="ShowOsd">
+      <arg type="s" direction="in" name="icon"/>
+      <arg type="s" direction="in" name="label"/>
     </method>
   </interface>
 </node>`;
@@ -65,7 +75,19 @@ function swapWindows() {
     return moves.length;
 }
 
-export default class SwapScreensExtension extends Extension {
+function showOsd(iconName, label) {
+    const icon = Gio.ThemedIcon.new(iconName);
+    const osd = Main.osdWindowManager;
+    // showAll is the every-monitor call from GNOME 46 on; show(-1, ...)
+    // meant the same before it. Both are read from gnome-shell's
+    // js/ui/osdWindow.js; which one 46 has is VERIFY-ON-HW.
+    if (typeof osd.showAll === 'function')
+        osd.showAll(icon, label, null, null);
+    else
+        osd.show(-1, icon, label, null, null);
+}
+
+export default class DuoExtension extends Extension {
     enable() {
         this._service = Gio.DBusExportedObject.wrapJSObject(INTERFACE, this);
         this._service.export(Gio.DBus.session, OBJECT_PATH);
@@ -76,7 +98,11 @@ export default class SwapScreensExtension extends Extension {
         this._service = null;
     }
 
-    Swap() {
+    SwapScreens() {
         return swapWindows();
+    }
+
+    ShowOsd(icon, label) {
+        showOsd(icon, label);
     }
 }

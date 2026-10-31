@@ -67,7 +67,7 @@ def quiet_model():
     for name in ("enable", "disable", "restart", "start_stop", "config_set", "panels", "layout",
                  "apply_displays", "kb_backlight", "bat_limit", "speaker_dsp", "login_layout",
                  "refresh_all", "refresh_slow", "refresh_fast", "refresh_kernel", "run_doctor_async",
-                 "audio", "touch_mapping", "brightness", "theme"):
+                 "audio", "touch_mapping", "brightness", "theme", "fan_profile", "fn_lock"):
         setattr(m, name, lambda *a, _n=name, **kw: dm.Result(True, _n, "first line\nsecond line"))
     return m
 

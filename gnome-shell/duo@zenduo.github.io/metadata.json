@@ -1,0 +1,7 @@
+{
+  "uuid": "duo@zenduo.github.io",
+  "name": "Zenbook Duo",
+  "description": "What linux-on-zenbook-duo needs from inside GNOME Shell: F8 swaps the windows between the two panels, as under Windows, and the Fn keys show a popup, as MyASUS does. Called over D-Bus; it adds nothing else to the screen.",
+  "shell-version": ["46", "47", "48", "49"],
+  "url": "https://github.com/Toldry/linux-on-zenbook-duo"
+}
