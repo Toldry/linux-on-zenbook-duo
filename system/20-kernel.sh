@@ -31,7 +31,7 @@ fi
 # The HWE metapackage is named for the release it backports INTO, so it is
 # derived from the running release rather than hardcoded.
 . /etc/os-release
-HWE="linux-generic-hwe-${VERSION_ID:-24.04}"
+HWE="linux-generic-hwe-${VERSION_ID:-26.04}"
 
 # "Published" takes two signals: an installed metapackage is self-evidently
 # published, and otherwise apt's Candidate must be a real version (apt prints a

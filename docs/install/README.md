@@ -1,7 +1,9 @@
 # Installing Ubuntu on the Zenbook Duo, next to Windows
 
-The condensed, as-built procedure. The full phase-gated plan it was executed
-from is archived at
+The condensed, as-built procedure. It was done with Ubuntu 24.04.4 in July
+2026; the laptop has since moved to 26.04.1 LTS, but this procedure, and
+whether 26.04's installer still has the LUKS trap below, was not re-run.
+The full phase-gated plan it was executed from is archived at
 [../research/2026-07-21-zenduo-master-plan-v1.1.md](../research/2026-07-21-zenduo-master-plan-v1.1.md);
 [CHECKLIST.md](CHECKLIST.md) is the tick-list version and
 [INSTALL-LOG.md](INSTALL-LOG.md) the journal of what actually happened,

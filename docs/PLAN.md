@@ -285,8 +285,9 @@ hardware test checklist that a release must pass on at least two machines.
 
 ### Z. 1.0
 
-1.0 means: two or more Duos have run it through the protocol; Ubuntu 24.04
-and 26.04 plus one non-Ubuntu distro pass `duo doctor` clean; the Fn row is
+1.0 means: two or more Duos have run it through the protocol; Ubuntu 26.04
+(the author's release) and 24.04 plus one non-Ubuntu distro pass `duo doctor`
+clean; the Fn row is
 complete; rotation and touch are verified; the audio chain is automatic on
 every EasyEffects packaging; the interfaces (`duo` subcommands, config keys,
 home-manager options) have not changed for a release cycle. Then the

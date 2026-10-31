@@ -10,7 +10,8 @@ OLED flicker is gone.
 
 [![ci](https://github.com/JowiAoun/linux-on-zenbook-duo/actions/workflows/ci.yml/badge.svg)](https://github.com/JowiAoun/linux-on-zenbook-duo/actions/workflows/ci.yml)
 
-> **Status:** in daily use since July 2026 on Ubuntu 24.04 (GNOME, Wayland),
+> **Status:** in daily use since July 2026 (GNOME, Wayland), installed on
+> Ubuntu 24.04.4 and now on Ubuntu 26.04.1 LTS,
 > extracted from a personal dotfiles repo in September 2026. Pre-1.0: the
 > interfaces may still move, and only one machine has run it so far. If you
 > have a Duo, please try it and open an issue with `duo report` attached —
@@ -47,13 +48,14 @@ is in [docs/FEATURES.md](docs/FEATURES.md).
 - **ASUS Zenbook Duo (2024) UX8406MA.** Later variants (UX8406CA) share the
   chassis and most of this should apply; report what does not.
 - **A kernel ≥ 6.11.** Below that, detaching the keyboard sends a spurious
-  rfkill press that kills Wi-Fi. Ubuntu 24.04.4 and 26.04 ship 7.0.
+  rfkill press that kills Wi-Fi. Ubuntu 26.04 ships 7.0 (and 24.04.4's HWE
+  kernel moved to it too).
 - **GNOME on Wayland** for the display features (they talk to Mutter's
   `org.gnome.Mutter.DisplayConfig`, the same API GNOME Settings uses; GNOME 46
   or newer for touch mapping). Keyboard, backlight, battery and audio work on
   any desktop. Other compositors are on the roadmap (docs/PLAN.md, phase N).
-- **Tested on Ubuntu 24.04.4 LTS.** The installer also knows Fedora and Arch
-  package names, untested — see [docs/PLAN.md](docs/PLAN.md) phase M.
+- **Tested on Ubuntu 26.04.1 LTS**, and on 24.04.4 before that. The
+  installer also knows Fedora and Arch package names, untested — see [docs/PLAN.md](docs/PLAN.md) phase M.
 
 ## Install
 

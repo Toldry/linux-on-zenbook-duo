@@ -2,8 +2,9 @@
 
 Everything the code relies on, with how it was established. "Measured" means
 on the author's UX8406MA (Core Ultra 7 155H, 16 GB, 1920×1200 60 Hz panels,
-BIOS 312), Ubuntu 24.04.4, kernels 6.17 → 7.0. Tags like **V8** are the claim
-numbers from the original master plan
+BIOS 312), first on Ubuntu 24.04.4 with kernels 6.17 → 7.0, now on Ubuntu
+26.04.1 LTS. A measurement keeps the release it was made on. Tags like **V8**
+are the claim numbers from the original master plan
 ([research/2026-07-21-zenduo-master-plan-v1.1.md](research/2026-07-21-zenduo-master-plan-v1.1.md) §2),
 kept so code comments and the research stay cross-referenced.
 
