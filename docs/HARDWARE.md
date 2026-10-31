@@ -84,7 +84,8 @@ kept so code comments and the research stay cross-referenced.
   measured 2026-10-31 under Windows: `7c` is F9, `7e` is F11, `86` is F12,
   `9d` is Fn+F (new: MyASUS cycles the fan profile on it). `9c` is
   bare F8, followed by `5a 00` on release (measured 2026-10-30, `duo
-  fn-probe`). `3d` is not a key: it arrived 41 times on 2026-09-27, docked and
+  fn-probe`); under Windows it swaps the windows between the two panels
+  (reported by the owner 2026-10-31, not captured). `3d` is not a key: it arrived 41 times on 2026-09-27, docked and
   over Bluetooth, often every 30 s or so and right after the keyboard
   connected, and on 2026-10-30 came as `5a 3d 05 09` / `5a 3d 06 09` with no
   key touched — a status report with a value in its third byte. `watch-fn`

@@ -99,6 +99,9 @@ usage: duo-cli <command>        (duo <command> runs the same thing)
   watch-backlight [src [dst]]  daemon: keep dst backlight synced to src
   theme [show|dark|light|toggle]
                          GNOME's light/dark style, as Settings → Appearance sets it
+  swap-screens [--enable]
+                         swap the windows between the panels (F8 under Windows);
+                         --enable installs the GNOME Shell extension it needs
   gui [--toggle]         the same things in a GNOME window (GTK 4 + libadwaita);
                          --toggle closes it when it is focused (what F12 runs)
   hotkeys apply|remove|show
@@ -111,6 +114,9 @@ usage: duo-cli <command>        (duo <command> runs the same thing)
                          the level is remembered and restored on dock/undock/resume
   kb-backlight --show    print the remembered level
   kb-backlight --apply <0-3>  set it without remembering (watch-fn's idle-off)
+  fn-lock [on|off|toggle]  swap the F-row (what Fn+Esc runs); remembered and
+                         re-sent on dock/undock/resume
+  mic-led on|off         the mic-mute LED on F9 (watch-fn keeps it in step)
   bat-limit [20-100]     battery charge-limit threshold (no value = BATTERY_LIMIT
                          from the config file)
   speaker-dsp <install|status|uninstall|seed|preset>
@@ -1056,6 +1062,9 @@ case "$cmd" in
   kb-init)            cmd_kb_init "$@" ;;
   watch-fn)           cmd_watch_fn "$@" ;;
   kb-backlight)       cmd_kb_backlight "$@" ;;
+  fn-lock)            exec python3 "$LIB/kb_state.py" fn-lock "$@" ;;
+  mic-led)            exec python3 "$LIB/kb_state.py" mic-led "$@" ;;
+  swap-screens)       exec python3 "$LIB/swap_screens.py" "$@" ;;
   bat-limit)          cmd_bat_limit "$@" ;;
   speaker-dsp)        cmd_speaker_dsp "$@" ;;
   audio)              cmd_audio "$@" ;;

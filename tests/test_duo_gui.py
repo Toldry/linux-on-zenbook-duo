@@ -94,15 +94,17 @@ class Knobs(unittest.TestCase):
         self.assertEqual(dg.knob_choices(method, ["a"]), ["temporary", "persistent"])
 
     def test_every_knob_has_words_and_lands_in_a_group(self):
-        groups = {title for title, _desc in dg.KNOB_GROUPS}
+        groups = {title for title, _desc in dg.KNOB_GROUPS} | {dg.EXTRAS[0]}
         for k in dm.KNOBS:
             self.assertIn(k.key, dg.KNOB_TEXT, k.key)
             self.assertIn(dg.knob_section(k), groups, k.key)
 
-    def test_the_f_keys_are_one_group(self):
+    def test_what_windows_does_not_do_is_on_its_own_tab(self):
         k = dm.KNOB_BY_KEY
-        self.assertEqual({dg.knob_section(k[key]) for key in ("F7_TERMINAL", "F8_DARK_MODE", "F12_GUI")},
-                         {"Keyboard shortcuts"})
+        self.assertEqual({key for key in k if dg.knob_page(k[key]) == "extras"},
+                         {"F7_TERMINAL", "F8_DARK_MODE"})
+        self.assertEqual(dg.knob_section(k["F12_GUI"]), "Keyboard shortcuts")
+        self.assertIn("extras", dg.PAGES)
 
     def test_a_knob_without_words_still_shows(self):
         knob = dm.Knob("NEW_KNOB", "bool", "something new")

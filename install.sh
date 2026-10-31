@@ -377,6 +377,11 @@ user_phase() {
     # GNOME's own disable-while-typing switch (the quirk gives it something to act on).
     dconf write /org/gnome/desktop/peripherals/touchpad/disable-while-typing true 2>/dev/null || true
   fi
+  # F8's Windows behaviour needs a GNOME Shell extension (Wayland lets only
+  # the Shell move windows); it is on from the next login.
+  if [ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ] && command -v gsettings >/dev/null 2>&1; then
+    run python3 "$SRC/lib/swap_screens.py" --enable || warn "F8 cannot swap screens: run duo swap-screens --enable"
+  fi
   if [ "$(conf_get F7_TERMINAL 1)" = 1 ] && [ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
     run python3 "$SRC/lib/hotkeys.py" apply "$duo" || warn "F7 not bound to the terminal: run duo hotkeys apply"
   fi

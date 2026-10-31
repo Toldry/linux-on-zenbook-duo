@@ -108,7 +108,8 @@ KNOBS = [
     Knob("LOGIN_SCREEN_LAYOUT", "bool", "give the GDM login screen the same layouts (needs the root helper)", daemon="watch-displays"),
     Knob("TOUCH_MAPPING", "bool", "pin each panel's touch and pen to that panel; GNOME alone puts both on the top one", daemon="watch-displays"),
     Knob("F7_TERMINAL", "bool", "F7 opens a terminal instead of GNOME's display switcher; applied by duo hotkeys apply"),
-    Knob("F8_DARK_MODE", "bool", "F8 toggles dark mode", daemon="watch-fn"),
+    Knob("F8_DARK_MODE", "bool", "F8 toggles dark mode; 0 swaps the windows between the panels, as under Windows",
+         daemon="watch-fn"),
     Knob("F12_GUI", "bool", "F12 (the MyASUS key) opens and closes the duo window", daemon="watch-fn"),
 ]
 

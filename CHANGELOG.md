@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+### An Extras tab for what Windows does not do
+
+- `duo gui` moves F7 opens a terminal, F8 switches dark mode and the dark
+  style switch to their own tab, Extras, so the Settings page only holds
+  what copies the laptop's Windows behaviour
+- the window is a little wider so seven tabs keep their names
+- with `F8_DARK_MODE=0`, F8 does what it does under Windows: it swaps the
+  windows between the two panels (`duo swap-screens`). Wayland lets only
+  GNOME Shell move windows, so the installer adds a small extension,
+  `swap-screens@zenduo.github.io`, that runs from the next login. Not yet
+  run on GNOME
+
+### Fn-lock, the mic-mute light and Fn+F, as MyASUS does them
+
+- Fn+Esc now swaps the F-row: `watch-fn` sends the same report MyASUS sends
+  (`duo fn-lock`), remembers the choice and re-sends it after dock, undock
+  and resume
+- F9's light follows the microphone's mute state (`duo mic-led`)
+- Fn+F steps the power profile, in MyASUS's order: balanced, power-saver,
+  performance
+- all three copy what a Windows capture showed (docs/HARDWARE.md, "What
+  MyASUS does") and have not been run on Linux yet
+
 ### A kit for watching the ASUS software on Windows
 
 - `windows/` holds Python scripts to run on the Windows partition: they log

@@ -199,8 +199,8 @@ needs the layer swap to be *performed*, not just seen. *Gate:* every key in
 Windows, measured 2026-10-31 (HARDWARE.md, "What MyASUS does"): F9 = `7c`,
 F11 = `7e`, F12 = `86`, Fn+F = `9d`. Fn-lock is host state: MyASUS answers
 `5a 4e` with `5a d0 4e 01`/`00`, and mic mute with the LED report `5a d0 7c
-01`/`00`. Those two writes, and Fn+F cycling `platform_profile`, are what is
-left to copy.
+01`/`00`. `watch-fn` now sends both (`duo fn-lock`, `duo mic-led`) and steps
+the power profile on Fn+F; what is left is running them on the hardware.
 
 ### R. Upstream kernel watch
 

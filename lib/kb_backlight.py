@@ -88,7 +88,20 @@ def keyboard_hidraw_nodes():
 
 
 def set_level(level, remember=True):
-    payload = [0x5A, 0xBA, 0xC5, 0xC4, level]
+    rc = send_vendor_report([0x5A, 0xBA, 0xC5, 0xC4, level], f"level {level}",
+                            "kb_backlight")
+    if rc == 0 and remember:
+        save_level(level)
+    return rc
+
+
+def send_vendor_report(payload, what, tag):
+    """Send one 0x5a feature report to the keyboard's vendor interface.
+
+    Shared with kb_state.py (Fn-lock, mic-mute LED). `what` names the report
+    in the success line, `tag` is the program name the lines start with.
+    Returns 0, or the exit codes in this module's docstring.
+    """
     # Address the interface that owns the ASUS vendor collection. Sending to
     # "whichever node accepts first" is what made this work docked one minute
     # and not the next: several interfaces accept the write and drop it, and
@@ -99,7 +112,7 @@ def set_level(level, remember=True):
         # to trying everything, which is all this could ever do before.
         targets = [(n, None) for n in kb_init.keyboard_hidraw_nodes()]
     if not targets:
-        print("kb_backlight: keyboard 0b05:1b2c not found on hidraw "
+        print(f"{tag}: keyboard 0b05:1b2c not found on hidraw "
               "(detached? paired over BT only?)", file=sys.stderr)
         return 1
     denied = False
@@ -122,21 +135,19 @@ def set_level(level, remember=True):
                     fcntl.ioctl(fd, hidiocsfeature(len(report)), bytes(report))
                 except OSError:
                     continue
-                if remember:
-                    save_level(level)
                 # Over Bluetooth a refused write still returns success here
                 # (kb_init.over_bluetooth), so "sent" is all that is known.
                 how = ", unconfirmed over Bluetooth" if kb_init.over_bluetooth(node) else ""
-                print(f"kb_backlight: level {level} sent via {node} ({len(report)} bytes{how})")
+                print(f"{tag}: {what} sent via {node} ({len(report)} bytes{how})")
                 return 0
         finally:
             os.close(fd)
     if denied:
-        print("kb_backlight: permission denied on hidraw — install the udev rule "
+        print(f"{tag}: permission denied on hidraw — install the udev rule "
               "(sudo ./install.sh --system) or re-attach the keyboard",
               file=sys.stderr)
         return 13
-    print("kb_backlight: the vendor interface rejected the report at every length",
+    print(f"{tag}: the vendor interface rejected the report at every length",
           file=sys.stderr)
     return 1
 

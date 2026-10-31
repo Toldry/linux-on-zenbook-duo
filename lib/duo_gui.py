@@ -39,7 +39,7 @@ ABOUT_LINKS = (
 )
 
 LOG_LINES = 400                 # journal lines the Logs page keeps
-THEME_SECONDS = 2.0             # F7 flips the style behind the window's back
+THEME_SECONDS = 2.0             # F8 flips the style behind the window's back
 
 SCREEN_BUTTONS = (("Top", "top"), ("Bottom", "bottom"), ("Both", "both"),
                   ("Toggle bottom", "toggle"))
@@ -47,7 +47,7 @@ LAYOUT_BUTTONS = (("Laptop", "laptop"), ("External", "external"), ("Extend", "ex
                   ("Mirror", "mirror"))
 BRIGHTNESS_BUTTONS = (("−", "down"), ("+", "up"), ("Match", "match"))
 
-PAGES = ("overview", "features", "settings", "logs", "doctor", "about")
+PAGES = ("overview", "features", "settings", "extras", "logs", "doctor", "about")
 
 # The Settings page, in the order it is shown: (title, description).
 KNOB_GROUPS = (
@@ -57,6 +57,13 @@ KNOB_GROUPS = (
     ("Battery", "Stops charging at this level, which makes the battery last longer. "
                 "20 to 100; empty charges to 100 %."),
 )
+
+# Everything on the Settings page copies what the laptop does under Windows.
+# What does not lives on its own tab, so it is never mistaken for parity.
+EXTRAS = ("Not what Windows does",
+          "Keys given a job of their own. Switched off, they do what they do under "
+          "Windows: F7 brings up GNOME's display switcher, as Win+P does, and F8 swaps "
+          "the windows between the two screens.")
 
 # What each knob is called on the Settings page: (group, title, subtitle).
 # duo_model's descriptions are written for `duo config`; these are written for
@@ -75,11 +82,13 @@ KNOB_TEXT = {
                             "The password prompt appears on the screen you were using."),
     "TOUCH_MAPPING": ("Screens", "Touch and pen stay on the screen you touch",
                       "Without this, GNOME sends touches on both screens to the top one."),
-    "F7_TERMINAL": ("Keyboard shortcuts", "F7 opens a terminal",
+    "F7_TERMINAL": (EXTRAS[0], "F7 opens a terminal",
                     "Instead of GNOME's display switcher. F7 types Super+P, so that shortcut "
                     "does the same; Ctrl+Alt+T keeps working too."),
-    "F8_DARK_MODE": ("Keyboard shortcuts", "F8 switches dark mode",
-                     "Light and dark style, as Settings → Appearance switches it."),
+    "F8_DARK_MODE": (EXTRAS[0], "F8 switches dark mode",
+                     "Light and dark style, as Settings → Appearance switches it. Off, F8 "
+                     "swaps the windows between the screens, as under Windows (from the next "
+                     "login after installing)."),
     "F12_GUI": ("Keyboard shortcuts", "F12 opens this window",
                 "Press F12 again while the window is in front to close it."),
     "BACKLIGHT_SOURCE": ("Brightness and keyboard light", "Brightness is copied from",
@@ -185,6 +194,11 @@ def knob_section(knob):
     return knob_text(knob)[0]
 
 
+def knob_page(knob):
+    """The tab a knob is on: extras for what Windows does not do, else settings."""
+    return "extras" if knob_section(knob) == EXTRAS[0] else "settings"
+
+
 def show_result(result):
     """Toast a finished action only when it failed: success shows on the page
     itself, and a toast saying "ok" after every click was noise."""
@@ -264,7 +278,7 @@ def make_app(Adw, Gio, GLib, Gtk, Pango):
         def __init__(self, app, model):
             super().__init__(application=app, title=TITLE)
             self.model = model
-            self.set_default_size(880, 820)
+            self.set_default_size(960, 820)
             self.seen = -1
             self.syncing = False       # rows being set from the model, not by a click
             self.busy = set()          # features with an action in flight
@@ -288,6 +302,8 @@ def make_app(Adw, Gio, GLib, Gtk, Pango):
                                             "application-x-addon-symbolic")
             self.stack.add_titled_with_icon(self.settings_page(), "settings", "Settings",
                                             "emblem-system-symbolic")
+            self.stack.add_titled_with_icon(self.extras_page(), "extras", "Extras",
+                                            "starred-symbolic")
             self.stack.add_titled_with_icon(self.logs_page(), "logs", "Logs",
                                             "text-x-generic-symbolic")
             self.stack.add_titled_with_icon(self.doctor_page(), "doctor", "Doctor",
@@ -430,10 +446,7 @@ def make_app(Adw, Gio, GLib, Gtk, Pango):
             screens.add(row)
             page.add(screens)
 
-            look = Adw.PreferencesGroup(title="Look and keyboard")
-            self.dark_row = Adw.SwitchRow(title="Dark style", subtitle="what F8 toggles")
-            self.dark_row.connect("notify::active", self.on_dark)
-            look.add(self.dark_row)
+            look = Adw.PreferencesGroup(title="Keyboard")
             row = Adw.ActionRow(title="Keyboard backlight")
             self.kb_buttons = []
             first = None
@@ -577,31 +590,55 @@ def make_app(Adw, Gio, GLib, Gtk, Pango):
             page.add(self.hm_banner)
             self.knob_rows = {}
             self.knob_shown = {}       # the value each entry row last showed
-            names = self.backlight_names = [n for n, _p in dm.backlights()]
+            self.backlight_names = [n for n, _p in dm.backlights()]
             groups = {}
             for title, desc in KNOB_GROUPS:
                 groups[title] = Adw.PreferencesGroup(title=title, description=desc)
                 page.add(groups[title])
             for knob in dm.KNOBS:
-                kind = knob_kind(knob, names)
-                _group, title, subtitle = knob_text(knob)
-                if kind == "switch":
-                    row = Adw.SwitchRow(title=title, subtitle=subtitle)
-                    row.connect("notify::active", self.on_switch_knob, knob.key)
-                elif kind == "choice":
-                    choices = knob_choices(knob, names)
-                    row = Adw.ComboRow(title=title, subtitle=subtitle,
-                                       model=Gtk.StringList.new([choice_label(c, knob) for c in choices]))
-                    row.choices = choices
-                    row.connect("notify::selected", self.on_choice_knob, knob.key)
-                else:
-                    row = Adw.EntryRow(title=title, show_apply_button=True)
-                    row.connect("apply", self.on_entry_knob, knob.key)
-                if kind != "entry":
-                    row.set_subtitle_lines(0)      # wrap, never ellipsize
-                row.set_tooltip_text(f"{knob.key} in zenduo.conf")
-                groups[knob_section(knob)].add(row)
-                self.knob_rows[knob.key] = row
+                if knob_page(knob) == "settings":
+                    groups[knob_section(knob)].add(self.knob_row(knob))
+            return page
+
+        def knob_row(self, knob):
+            names = self.backlight_names
+            kind = knob_kind(knob, names)
+            _group, title, subtitle = knob_text(knob)
+            if kind == "switch":
+                row = Adw.SwitchRow(title=title, subtitle=subtitle)
+                row.connect("notify::active", self.on_switch_knob, knob.key)
+            elif kind == "choice":
+                choices = knob_choices(knob, names)
+                row = Adw.ComboRow(title=title, subtitle=subtitle,
+                                   model=Gtk.StringList.new([choice_label(c, knob) for c in choices]))
+                row.choices = choices
+                row.connect("notify::selected", self.on_choice_knob, knob.key)
+            else:
+                row = Adw.EntryRow(title=title, show_apply_button=True)
+                row.connect("apply", self.on_entry_knob, knob.key)
+            if kind != "entry":
+                row.set_subtitle_lines(0)      # wrap, never ellipsize
+            row.set_tooltip_text(f"{knob.key} in zenduo.conf")
+            self.knob_rows[knob.key] = row
+            return row
+
+        # ── Extras ────────────────────────────────────────────────────────────
+
+        def extras_page(self):
+            # Built after the Settings page, which sets up knob_rows and the
+            # backlight names; sync_settings keeps these rows too.
+            page = Adw.PreferencesPage()
+            title, desc = EXTRAS
+            group = Adw.PreferencesGroup(title=title, description=desc)
+            for knob in dm.KNOBS:
+                if knob_page(knob) == "extras":
+                    group.add(self.knob_row(knob))
+            page.add(group)
+            look = Adw.PreferencesGroup(title="Style")
+            self.dark_row = Adw.SwitchRow(title="Dark style", subtitle="what F8 toggles")
+            self.dark_row.connect("notify::active", self.on_dark)
+            look.add(self.dark_row)
+            page.add(look)
             return page
 
         def set_knob(self, key, value):
