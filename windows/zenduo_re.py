@@ -817,6 +817,9 @@ def run_steps(log, scenario=None, keys=None, out=None, detect=None, after_step=N
               file=out)
         while True:
             label = keys.line()
+            if done and after_step and label.strip():
+                # What the previous label caught, BIOS changes included.
+                print("  " + paint("ok", "✓ " + (after_step(done) or "done")), file=out)
             if not label or label.strip().lower() == "q":
                 break
             if label.strip():

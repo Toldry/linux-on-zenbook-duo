@@ -147,6 +147,13 @@ class Markers(unittest.TestCase):
         self.assertEqual([m["label"] for m in records],
                          ["capture started", "fan whisper", "capture stopped"])
 
+    def test_free_form_labels_get_a_summary_each(self):
+        n, _, out = self.run_steps(None, FakeKeys(lines=["pick 8 GB\n", "cancel\n", "q\n"]),
+                                   after_step=lambda i: f"caught {i}")
+        self.assertEqual(n, 2)
+        self.assertIn("✓ caught 1", out)
+        self.assertIn("✓ caught 2", out)
+
     def test_marker_is_written_when_the_step_is_shown(self):
         # Step 1 of power is an action: shown, marked, then Enter = done.
         # Step 2 is skipped (it gets a "skipped:" marker), then q stops.
