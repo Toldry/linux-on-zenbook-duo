@@ -23,6 +23,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import kb_backlight  # noqa: E402  (same directory; owns the report sender)
+import shell_ext  # noqa: E402  (the popup)
 
 FN_LOCK = [0x5A, 0xD0, 0x4E]
 MIC_LED = [0x5A, 0xD0, 0x7C]
@@ -89,7 +90,11 @@ def main(argv):
             return set_fn_lock(True) if read_fn_lock() else 0
         if arg in ("on", "off", "toggle"):
             on = (not read_fn_lock()) if arg == "toggle" else arg == "on"
-            return set_fn_lock(on)
+            rc = set_fn_lock(on)
+            if rc == 0 and arg == "toggle":
+                # What Fn+Esc runs; MyASUS shows a popup there too.
+                shell_ext.osd("input-keyboard-symbolic", "Fn lock on" if on else "Fn lock off")
+            return rc
     if argv[:1] == ["mic-led"] and len(argv) == 2 and argv[1] in ("on", "off"):
         return set_mic_led(argv[1] == "on")
     print(__doc__, file=sys.stderr)

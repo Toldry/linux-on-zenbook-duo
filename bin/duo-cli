@@ -101,7 +101,11 @@ usage: duo-cli <command>        (duo <command> runs the same thing)
                          GNOME's light/dark style, as Settings → Appearance sets it
   swap-screens [--enable]
                          swap the windows between the panels (F8 under Windows);
-                         --enable installs the GNOME Shell extension it needs
+                         --enable installs the GNOME Shell extension it and the
+                         key popups need
+  osd ICON LABEL         the popup GNOME shows for volume, with a label of ours
+  fan-profile [show|next|standard|whisper|performance]
+                         the BIOS fan mode MyASUS sets; next is what Fn+F runs
   gui [--toggle]         the same things in a GNOME window (GTK 4 + libadwaita);
                          --toggle closes it when it is focused (what F12 runs)
   hotkeys apply|remove|show
@@ -1064,7 +1068,9 @@ case "$cmd" in
   kb-backlight)       cmd_kb_backlight "$@" ;;
   fn-lock)            exec python3 "$LIB/kb_state.py" fn-lock "$@" ;;
   mic-led)            exec python3 "$LIB/kb_state.py" mic-led "$@" ;;
-  swap-screens)       exec python3 "$LIB/swap_screens.py" "$@" ;;
+  swap-screens)       exec python3 "$LIB/shell_ext.py" "$@" ;;
+  osd)                exec python3 "$LIB/shell_ext.py" osd "$@" ;;
+  fan-profile)        exec python3 "$LIB/fan_profile.py" "$@" ;;
   bat-limit)          cmd_bat_limit "$@" ;;
   speaker-dsp)        cmd_speaker_dsp "$@" ;;
   audio)              cmd_audio "$@" ;;

@@ -1,7 +1,0 @@
-{
-  "uuid": "swap-screens@zenduo.github.io",
-  "name": "Zenbook Duo: swap screens",
-  "description": "Moves the windows on the top panel to the bottom one and back, as F8 does under Windows. linux-on-zenbook-duo calls it over D-Bus; it adds nothing to the screen.",
-  "shell-version": ["46", "47", "48", "49"],
-  "url": "https://github.com/Toldry/linux-on-zenbook-duo"
-}

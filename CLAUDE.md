@@ -58,8 +58,8 @@ lib/*.py           daemons + helpers. stdlib only, except displayctl/watch_displ
 lib/conf.sh        the config reader, sourced by bin/duo-cli (parsed, never sourced).
 system/*.sh        root half. Each: source lib.sh; require_root; feature_on NAME default; idempotent; DRY_RUN.
 systemd/user/      unit templates install.sh copies; nix/home-manager.nix generates its own.
-gnome-shell/       the swap-screens extension (F8 as under Windows); only the Shell may move
-                   windows under Wayland. Called by lib/swap_screens.py over D-Bus.
+gnome-shell/       the duo extension: F8's window swap and the Fn-key popups, which only the
+                   Shell may do under Wayland. Called by lib/shell_ext.py over D-Bus.
 nix/               flake + package + module. `nix flake check` builds and evaluates everything.
 tests/             make test. Add a test with every fix in a testable layer.
 windows/           a capture kit run on Windows (docs/WINDOWS-RE.md); stdlib, plus Frida and

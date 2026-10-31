@@ -223,7 +223,7 @@ in
     swapScreens = lib.mkOption {
       type = lib.types.bool;
       default = true;
-      description = "Install the GNOME Shell extension F8 needs to swap the windows between the panels, as under Windows (when F8 is not bound to dark mode). It is enabled at activation and runs from the next login.";
+      description = "Install the GNOME Shell extension F8 needs to swap the windows between the panels, as under Windows (when F8 is not bound to dark mode), and that draws the Fn-key popups. It is enabled at activation and runs from the next login.";
     };
 
     kbBacklightRestore = lib.mkOption {
@@ -284,8 +284,8 @@ in
     # Linked from the package, then added to GNOME's enabled-extensions list
     # (appended, never replacing the user's own entries). Without a session
     # bus the enable is skipped; `duo swap-screens --enable` does it later.
-    xdg.dataFile."gnome-shell/extensions/swap-screens@zenduo.github.io" = lib.mkIf cfg.swapScreens {
-      source = "${cfg.package}/lib/zenduo/gnome-shell/swap-screens@zenduo.github.io";
+    xdg.dataFile."gnome-shell/extensions/duo@zenduo.github.io" = lib.mkIf cfg.swapScreens {
+      source = "${cfg.package}/lib/zenduo/gnome-shell/duo@zenduo.github.io";
     };
     home.activation.zenduoSwapScreens = lib.mkIf cfg.swapScreens
       (lib.hm.dag.entryAfter [ "linkGeneration" ] ''
