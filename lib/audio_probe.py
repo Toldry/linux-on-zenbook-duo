@@ -47,6 +47,24 @@ def run(argv, timeout=10):
 
 # ── Bluetooth ────────────────────────────────────────────────────────────────
 
+# A Bluetooth peer names itself, and BlueZ keeps any valid UTF-8, terminal
+# escape sequences included. Control characters (C0, DEL and C1) become "?"
+# once, here, so nothing that prints a device name can forget to. A tab or a
+# newline would also break the tab-separated lines `duo doctor` reads.
+UNPRINTABLE = dict.fromkeys([*range(0x20), 0x7F, *range(0x80, 0xA0)], "?")
+
+
+def printable(value):
+    """`value` with every string in it made safe to print."""
+    if isinstance(value, str):
+        return value.translate(UNPRINTABLE)
+    if isinstance(value, list):
+        return [printable(v) for v in value]
+    if isinstance(value, dict):
+        return {k: printable(v) for k, v in value.items()}
+    return value
+
+
 def read_pw_dump():
     """Every PipeWire object as pw-dump prints it, or [] without a server."""
     rc, out = run(["pw-dump"])
@@ -56,7 +74,7 @@ def read_pw_dump():
         objs = json.loads(out)
     except ValueError:
         return []
-    return objs if isinstance(objs, list) else []
+    return printable(objs) if isinstance(objs, list) else []
 
 
 def bluetooth_profiles(objs):

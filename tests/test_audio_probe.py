@@ -3,6 +3,7 @@
 Nothing here runs pw-dump or systemctl; the parsers get the shapes those
 tools produce, taken from a live session on 2026-09-20."""
 
+import json
 import os
 import sys
 import tempfile
@@ -33,6 +34,17 @@ STAT_OTHER = STAT_RR.replace(" -1 8 20 2 0 0 0 ", " -1 8 0 0 0 0 0 ")
 
 
 class BluetoothTest(unittest.TestCase):
+    def test_a_device_name_cannot_carry_terminal_escapes(self):
+        dump = [device("bluez_card.x", "Buds\x1b]0;owned\x07\x9b2J\tx\ny", A2DP)]
+        old = ap.run
+        ap.run = lambda argv, timeout=10: (0, json.dumps(dump))
+        try:
+            out = ap.bluetooth_profiles(ap.read_pw_dump())
+        finally:
+            ap.run = old
+        self.assertEqual(out[0]["description"], "Buds?]0;owned??2J?x?y")
+        self.assertEqual(out[0]["profile"], "a2dp-sink")
+
     def test_a_headset_profile_is_named_and_flagged(self):
         out = ap.bluetooth_profiles([device("bluez_card.x", "EarFun Air Pro 4", HEADSET)])
         self.assertEqual(len(out), 1)
