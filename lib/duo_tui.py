@@ -735,6 +735,9 @@ class Services(View):
         if f.name == "palm-rejection":
             on = os.path.exists("/etc/libinput/local-overrides.quirks")
             return ("installed", "ok", "") if on else ("absent", "off", "")
+        if f.name == "separate-fan":
+            on = os.path.exists(dm.SEPARATE_FAN_DROPIN)
+            return ("installed", "ok", "") if on else ("absent", "off", "")
         return ("?", "off", "")
 
     def render(self, cv, r):

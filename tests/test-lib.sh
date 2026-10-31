@@ -270,6 +270,7 @@ is "child: --speaker-dsp survives"            "$(field "$c" SPEAKER_DSP)" 1
 is "no flags forwards nothing"                "$(field "$(plan)" USER_FLAGS)" ""
 is "--user alone means the user half only"    "$(field "$(plan --user)" DO_SYSTEM)" 0
 is "--system alone skips the user half"       "$(field "$(plan --system)" DO_USER)" 0
+is "--no-separate-fan goes to the system half" "$(field "$(plan --no-separate-fan)" SYSTEM_FLAGS)" "--no-separate-fan"
 fails "--battery-limit out of range is refused" plan --battery-limit 10
 fails "--apply-method never is refused"        plan --apply-method never
 fails "an unknown flag is refused"             plan --bogus
