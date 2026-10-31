@@ -135,7 +135,7 @@ case "${1:-}" in
     # and the install itself use that one copy.
     as_user "$uid" "$gid" test -f "$src" </dev/null \
       || { echo "zenduo-helper: $src does not exist yet (nothing remembered)" >&2; exit 66; }
-    work="$(mktemp -d)"
+    work="$(mktemp -d /tmp/zenduo-helper.XXXXXXXX)"
     trap 'rm -rf "$work"' EXIT
     copy="$work/monitors.xml"
     read_rc=0

@@ -34,6 +34,7 @@ except ImportError:  # a python built without _curses: snapshots still work
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import duo_model as dm  # noqa: E402
+from textsafe import printable  # noqa: E402
 
 Region = namedtuple("Region", "y x h w")
 
@@ -85,8 +86,9 @@ class Canvas:
     def put(self, y, x, text, attr=0, maxw=None):
         if y < 0 or y >= self.h or not text:
             return
-        text = text.replace("\t", "  ")
-        text = "".join(c if c >= " " and c != "\x7f" else "?" for c in text)
+        # Device names (EDID, Bluetooth, HID) reach the screen, and
+        # `--snapshot` prints it without curses: C0, DEL and C1 become "?".
+        text = printable(text.replace("\t", "  "))
         if maxw is not None:
             text = text[:max(0, maxw)]
         if x < 0:
