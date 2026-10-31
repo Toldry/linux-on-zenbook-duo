@@ -99,6 +99,9 @@ usage: duo-cli <command>        (duo <command> runs the same thing)
   watch-backlight [src [dst]]  daemon: keep dst backlight synced to src
   theme [show|dark|light|toggle]
                          GNOME's light/dark style, as Settings → Appearance sets it
+  swap-screens [--enable]
+                         swap the windows between the panels (F8 under Windows);
+                         --enable installs the GNOME Shell extension it needs
   gui [--toggle]         the same things in a GNOME window (GTK 4 + libadwaita);
                          --toggle closes it when it is focused (what F12 runs)
   hotkeys apply|remove|show
@@ -1061,6 +1064,7 @@ case "$cmd" in
   kb-backlight)       cmd_kb_backlight "$@" ;;
   fn-lock)            exec python3 "$LIB/kb_state.py" fn-lock "$@" ;;
   mic-led)            exec python3 "$LIB/kb_state.py" mic-led "$@" ;;
+  swap-screens)       exec python3 "$LIB/swap_screens.py" "$@" ;;
   bat-limit)          cmd_bat_limit "$@" ;;
   speaker-dsp)        cmd_speaker_dsp "$@" ;;
   audio)              cmd_audio "$@" ;;

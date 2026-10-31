@@ -22,7 +22,8 @@ This daemon closes the loop:
       fn-lock        -> `duo fn-lock toggle`: the F-row swap is host state
       fan-profile    -> power-profiles-daemon, in MyASUS's Fn+F order (Fn+F)
       emoji          -> `ibus emoji` (the picker GNOME's Ctrl+; opens)
-      split-screen   -> `duo theme toggle`, dark mode (bare F8)
+      split-screen   -> `duo theme toggle` (F8_DARK_MODE=1), else `duo swap-screens`
+                        as Windows does (bare F8)
       myasus         -> `duo gui --toggle`, the duo window (bare F12)
   - honors ~/.config/zenduo/fn-map.json (from `duo fn-map`) as overrides, so
     newly-captured codes map onto actions without touching this file
@@ -322,9 +323,12 @@ class Dispatcher:
             # environment, same as gdbus does for brightness.
             self.spawn(["ibus", "emoji"])
         elif action == "split-screen":
-            if os.environ.get("ZENDUO_F8_DARK_MODE", "1") != "1":
-                return  # F8_DARK_MODE=0 in zenduo.conf
-            self.spawn([DUO, "theme", "toggle"])
+            # Under Windows F8 swaps the windows between the panels (the
+            # owner, 2026-10-31); dark mode is this project's own extra.
+            if os.environ.get("ZENDUO_F8_DARK_MODE", "1") == "1":
+                self.spawn([DUO, "theme", "toggle"])
+            else:
+                self.spawn([DUO, "swap-screens"])
         elif action == "myasus":
             if os.environ.get("ZENDUO_F12_GUI", "1") != "1":
                 return  # F12_GUI=0 in zenduo.conf

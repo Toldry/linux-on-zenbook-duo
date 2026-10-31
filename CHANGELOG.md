@@ -8,6 +8,11 @@
   style switch to their own tab, Extras, so the Settings page only holds
   what copies the laptop's Windows behaviour
 - the window is a little wider so seven tabs keep their names
+- with `F8_DARK_MODE=0`, F8 does what it does under Windows: it swaps the
+  windows between the two panels (`duo swap-screens`). Wayland lets only
+  GNOME Shell move windows, so the installer adds a small extension,
+  `swap-screens@zenduo.github.io`, that runs from the next login. Not yet
+  run on GNOME
 
 ### Fn-lock, the mic-mute light and Fn+F, as MyASUS does them
 

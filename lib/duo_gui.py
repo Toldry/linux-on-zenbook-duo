@@ -61,8 +61,9 @@ KNOB_GROUPS = (
 # Everything on the Settings page copies what the laptop does under Windows.
 # What does not lives on its own tab, so it is never mistaken for parity.
 EXTRAS = ("Not what Windows does",
-          "Keys given a job of their own. Switched off, F7 brings up GNOME's display "
-          "switcher, as Win+P does under Windows, and F8 does nothing.")
+          "Keys given a job of their own. Switched off, they do what they do under "
+          "Windows: F7 brings up GNOME's display switcher, as Win+P does, and F8 swaps "
+          "the windows between the two screens.")
 
 # What each knob is called on the Settings page: (group, title, subtitle).
 # duo_model's descriptions are written for `duo config`; these are written for
@@ -85,7 +86,9 @@ KNOB_TEXT = {
                     "Instead of GNOME's display switcher. F7 types Super+P, so that shortcut "
                     "does the same; Ctrl+Alt+T keeps working too."),
     "F8_DARK_MODE": (EXTRAS[0], "F8 switches dark mode",
-                     "Light and dark style, as Settings → Appearance switches it."),
+                     "Light and dark style, as Settings → Appearance switches it. Off, F8 "
+                     "swaps the windows between the screens, as under Windows (from the next "
+                     "login after installing)."),
     "F12_GUI": ("Keyboard shortcuts", "F12 opens this window",
                 "Press F12 again while the window is in front to close it."),
     "BACKLIGHT_SOURCE": ("Brightness and keyboard light", "Brightness is copied from",

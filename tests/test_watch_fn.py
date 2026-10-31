@@ -137,12 +137,12 @@ class DarkMode(unittest.TestCase):
             d.dispatch(0x9C, "split-screen")
         self.assertEqual(d.spawned, [[watch_fn.DUO, "theme", "toggle"]])
 
-    def test_f8_dark_mode_off_runs_nothing(self):
+    def test_f8_dark_mode_off_swaps_the_screens_as_windows_does(self):
         from unittest import mock
         d = Recorder()
         with mock.patch.dict(os.environ, {"ZENDUO_F8_DARK_MODE": "0"}):
             d.dispatch(0x9C, "split-screen")
-        self.assertEqual(d.spawned, [])
+        self.assertEqual(d.spawned, [[watch_fn.DUO, "swap-screens"]])
 
 
 class Window(unittest.TestCase):

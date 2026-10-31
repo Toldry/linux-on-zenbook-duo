@@ -26,7 +26,7 @@ stdenvNoCC.mkDerivation {
   src = lib.fileset.toSource {
     root = ../.;
     fileset = lib.fileset.unions [
-      ../bin ../lib ../helper ../config ../presets ../VERSION
+      ../bin ../lib ../helper ../config ../presets ../gnome-shell ../VERSION
     ];
   };
 
@@ -36,7 +36,7 @@ stdenvNoCC.mkDerivation {
   installPhase = ''
     runHook preInstall
     mkdir -p $out/lib/zenduo $out/bin
-    cp -r bin lib helper config presets VERSION $out/lib/zenduo/
+    cp -r bin lib helper config presets gnome-shell VERSION $out/lib/zenduo/
     chmod +x $out/lib/zenduo/bin/duo $out/lib/zenduo/bin/duo-cli $out/lib/zenduo/helper/zenduo-helper
     for name in duo duo-cli; do
       makeWrapper $out/lib/zenduo/bin/$name $out/bin/$name \
