@@ -113,7 +113,8 @@ system_half() {
       elif [ -e "$d/monitors.xml.zenduo-installed" ]; then
         rm -f -- "$d/monitors.xml" "$d/monitors.xml.zenduo-installed"
         echo removed
-      fi' uninstall "$gdm_home" </dev/null)"
+      fi' uninstall "$gdm_home" </dev/null 2>&1)" \
+      || warn "could not tidy the login screen's monitors.xml as gdm: $gdm_done"
     case "$gdm_done" in
       restored) log "restored the login screen's own monitors.xml" ;;
       removed) log "removed the login screen layout this project installed" ;;

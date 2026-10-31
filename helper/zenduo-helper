@@ -112,7 +112,6 @@ case "${1:-}" in
   login-layout)
     quiet=0
     [ "${2:-}" = "--quiet" ] && quiet=1
-    say() { [ "$quiet" = 1 ] || echo "zenduo-helper: $*"; }
     command -v setpriv >/dev/null 2>&1 \
       || { echo "zenduo-helper: login-layout needs setpriv (util-linux)" >&2; exit 69; }
     cd /
@@ -181,7 +180,12 @@ case "${1:-}" in
       || { echo "zenduo-helper: no gdm account — the login screen is not GDM's to set" >&2; exit 66; }
     # Every write in the greeter's home happens as gdm. Root writing there
     # would follow any symlink the gdm account left in its own directory.
-    as_user "$gdm_uid" "$gdm_gid" bash -c "$GDM_INSTALL" zenduo-helper "$gdm_home/.config" "$quiet" < "$copy"
+    # Its output is captured, so nothing running as gdm holds the caller's
+    # terminal.
+    rc=0
+    out="$(as_user "$gdm_uid" "$gdm_gid" bash -c "$GDM_INSTALL" zenduo-helper "$gdm_home/.config" "$quiet" < "$copy" 2>&1)" || rc=$?
+    [ -z "$out" ] || printf '%s\n' "$out"
+    exit "$rc"
     ;;
   *)
     usage
