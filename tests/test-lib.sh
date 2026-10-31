@@ -182,6 +182,64 @@ is "login-layout rejects a non-numeric uid"     "$(SUDO_UID=nobody ./helper/zend
 # 4294967295 is (uid_t)-1: getent never resolves it, on any machine.
 is "login-layout needs a uid with a home"       "$(SUDO_UID=4294967295 ./helper/zenduo-helper login-layout >/dev/null 2>&1; echo $?)" 66
 
+# login-layout end to end, with getent and setpriv stubbed so it runs without
+# root. The fake setpriv cannot switch accounts, so it logs the account each
+# command was meant to run as. The fake gdm is uid 4242.
+group "zenduo-helper login-layout"
+ll="$(mktemp -d)"
+mkdir -p "$ll/bin" "$ll/home/.config" "$ll/gdm"
+me_uid="$(id -u)"
+cat > "$ll/bin/getent" <<EOF
+#!/usr/bin/env bash
+case "\$2" in
+  gdm) echo "gdm:x:4242:4242::$ll/gdm:/bin/false" ;;
+  $me_uid) echo "me:x:$me_uid:$(id -g)::$ll/home:/bin/bash" ;;
+  *) exit 2 ;;
+esac
+EOF
+cat > "$ll/bin/setpriv" <<EOF
+#!/usr/bin/env bash
+as="\${1#--reuid=}"
+while [ "\$1" != -- ]; do shift; done
+shift
+echo "\$as \$1" >> "$ll/setpriv.log"
+# A file swapped right after the caller's read, to show what gets installed.
+if [ "\$1" = cat ] && [ -e "$ll/swap" ]; then
+  "\$@"; rc=\$?; cp "$ll/swap" "$ll/home/.config/monitors.xml"; exit \$rc
+fi
+exec "\$@"
+EOF
+chmod +x "$ll/bin/getent" "$ll/bin/setpriv"
+src="$ll/home/.config/monitors.xml" dst="$ll/gdm/.config/monitors.xml"
+good='<monitors version="2"><configuration><logicalmonitor><x>0</x></logicalmonitor></configuration></monitors>'
+login_layout() { ( PATH="$ll/bin:$PATH" SUDO_UID="$me_uid" ./helper/zenduo-helper login-layout ) >/dev/null 2>&1; echo $?; }
+
+is "a missing file is 'nothing remembered' (66)"     "$(login_layout)" 66
+printf '%s\n' "$good" > "$src"
+is "a good file is installed"                         "$(login_layout)" 0
+is "the greeter's copy is the caller's file"          "$(cmp -s "$src" "$dst" && echo same)" same
+is "the greeter's copy is world-readable (0644)"      "$(stat -c %a "$dst")" 644
+is "a first install leaves the 'ours' marker"         "$([ -e "$dst.zenduo-installed" ] && echo yes)" yes
+is "a second run with the same file changes nothing"  "$(login_layout)" 0
+is "the caller's file is read as the caller"         "$(grep -c "^$me_uid cat\$" "$ll/setpriv.log")" 2
+is "the greeter's files are only written as gdm"      "$(grep -c '^4242 bash$' "$ll/setpriv.log")" 2
+is "root ran nothing else through setpriv"            "$(grep -vcE "^($me_uid (test|cat)|4242 bash)\$" "$ll/setpriv.log")" 0
+printf '%s\n' '<monitors version="2"><evil/></monitors>' > "$src"
+is "an unknown element is refused (65)"               "$(login_layout)" 65
+printf '%s\n' '<monitors version="2"><!-- x --></monitors>' > "$src"
+is "a comment is refused"                             "$(login_layout)" 65
+{ printf '%s\n' '<monitors version="2">'; head -c 70000 /dev/zero | tr '\0' ' '; } > "$src"
+is "a file over 64 KiB is refused"                    "$(login_layout)" 65
+is "a refused file leaves the greeter's copy alone"   "$(grep -c '<x>0</x>' "$dst")" 1
+# The old helper checked the path, then opened it again to copy. A swap in
+# between installed bytes nobody checked, or a symlink to a root-only file.
+printf '%s\n' "${good/0<\/x>/1<\/x>}" > "$src"
+printf '%s\n' '<monitors version="2"><evil/></monitors>' > "$ll/swap"
+is "a file swapped after the read still installs"     "$(login_layout)" 0
+is "what is installed is what was checked"            "$(grep -c '<x>1</x>' "$dst")" 1
+rm -f "$ll/swap"
+rm -rf "$ll"
+
 # ── the amp reporter, extracted from the script that installs it ─────────────
 # Its verdict feeds `duo doctor`. A user outside the adm group gets no kernel
 # journal, and counting zero hits in nothing used to read as "clean".

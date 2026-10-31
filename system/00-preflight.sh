@@ -36,6 +36,10 @@ if command -v fuser >/dev/null 2>&1 && fuser /var/lib/dpkg/lock-frontend >/dev/n
   die "another package manager holds the apt/dpkg lock — retry after it finishes"
 fi
 
+# The root helper and uninstall.sh drop to the user's and gdm's accounts
+# with it, so root never touches files in a directory another account owns.
+command -v setpriv >/dev/null 2>&1 || die "setpriv is missing (it comes with util-linux) — install that first"
+
 # Sanity-check the source tree we are about to install from.
 for f in bin/duo bin/duo-cli helper/zenduo-helper lib/displayctl.py lib/watch_displays.py lib/watch_fn.py; do
   [ -f "$ZENDUO_SRC/$f" ] || die "missing $ZENDUO_SRC/$f — incomplete checkout?"

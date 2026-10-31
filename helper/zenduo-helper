@@ -26,6 +26,45 @@ transform rotation flipped monitor monitorspec connector vendor product serial
 mode width height rate ratemode flag underscanning maxbpc rgbrange disabled
 policy stores store dbus migrated"
 
+# Run a command as another account, with no way back to root.
+as_user() { # <uid> <gid> <command...>
+  local u="$1" g="$2"
+  shift 2
+  setpriv --reuid="$u" --regid="$g" --init-groups --no-new-privs -- "$@"
+}
+
+# The greeter's half of login-layout, run as gdm with the checked file on
+# stdin. $1 is the greeter's config directory, $2 is 1 for --quiet.
+GDM_INSTALL="$(cat <<'GDM'
+set -euo pipefail
+dir="$1" quiet="$2"
+dst="$dir/monitors.xml"
+say() { [ "$quiet" = 1 ] || echo "zenduo-helper: $*"; }
+umask 022
+mkdir -p -- "$dir"
+new="$(mktemp "$dir/.monitors.xml.XXXXXX")"
+trap 'rm -f -- "$new"' EXIT
+cat > "$new"
+# Back up the greeter's own file once, and leave a marker when there was
+# none, so uninstall.sh can tell "restore theirs" from "remove ours".
+if [ ! -e "$dst.zenduo-backup" ] && [ ! -e "$dst.zenduo-installed" ]; then
+  if [ -e "$dst" ]; then
+    cp -a -- "$dst" "$dst.zenduo-backup"
+    say "kept the login screen's own layout as $dst.zenduo-backup"
+  else
+    : > "$dst.zenduo-installed"
+  fi
+fi
+if cmp -s -- "$new" "$dst"; then
+  say "login screen layout already up to date"
+  exit 0
+fi
+chmod 0644 -- "$new"
+mv -f -- "$new" "$dst"
+say "login screen will use the remembered layouts ($dst)"
+GDM
+)"
+
 case "${1:-}" in
   backlight)
     dev="${2:-}"
@@ -65,6 +104,9 @@ case "${1:-}" in
     quiet=0
     [ "${2:-}" = "--quiet" ] && quiet=1
     say() { [ "$quiet" = 1 ] || echo "zenduo-helper: $*"; }
+    command -v setpriv >/dev/null 2>&1 \
+      || { echo "zenduo-helper: login-layout needs setpriv (util-linux)" >&2; exit 69; }
+    cd /
 
     # The caller is identified by sudo, never by an argument: an argument
     # would let one user publish another user's file to the greeter.
@@ -72,31 +114,44 @@ case "${1:-}" in
     [[ "$uid" =~ ^[0-9]+$ ]] || { echo "zenduo-helper: login-layout must be run through sudo" >&2; exit 64; }
     # `|| true` inside the substitution: getent exits 2 for an unknown key and
     # pipefail would take the whole script down before the check below runs.
-    src_home="$(getent passwd "$uid" 2>/dev/null | cut -d: -f6 || true)"
+    IFS=: read -r _ _ _ gid _ src_home _ <<<"$(getent passwd "$uid" 2>/dev/null || true)"
     [ -n "$src_home" ] || { echo "zenduo-helper: uid $uid has no home directory" >&2; exit 66; }
+    [[ "$gid" =~ ^[0-9]+$ ]] || { echo "zenduo-helper: uid $uid has no primary group" >&2; exit 66; }
     src="$src_home/.config/monitors.xml"
-    [ -f "$src" ] || { echo "zenduo-helper: $src does not exist yet (nothing remembered)" >&2; exit 66; }
 
-    # Validation, in the order that a bad file could do harm: the right owner,
-    # a sane size, no doctype/processing instruction/comment, and no element
-    # mutter does not know. A file that fails any of these is not installed;
-    # the greeter then keeps whatever it had.
-    owner="$(stat -c %u "$src")"
-    [ "$owner" = "$uid" ] || { echo "zenduo-helper: $src is not owned by uid $uid" >&2; exit 77; }
-    size="$(stat -c %s "$src")"
+    # Root never opens a path in the caller's home. It would follow any
+    # symlink they put there, and a check followed by a second open can be
+    # raced with a swap in between. So the file is read once, as the caller,
+    # through a pipe into a directory only root can see. Every check below
+    # and the install itself use that one copy.
+    as_user "$uid" "$gid" test -f "$src" \
+      || { echo "zenduo-helper: $src does not exist yet (nothing remembered)" >&2; exit 66; }
+    work="$(mktemp -d)"
+    trap 'rm -rf "$work"' EXIT
+    copy="$work/monitors.xml"
+    read_rc=0
+    as_user "$uid" "$gid" cat -- "$src" | timeout 10 head -c 65537 > "$copy" || read_rc=$?
+
+    # Validation, in the order that a bad file could do harm: a sane size, no
+    # doctype/processing instruction/comment, and no element mutter does not
+    # know. A file that fails any of these is not installed; the greeter then
+    # keeps whatever it had. Ownership is not checked: the copy holds bytes
+    # the caller could read anyway, so these checks are what guard the greeter.
+    size="$(stat -c %s "$copy")"
     [[ "$size" -gt 0 && "$size" -le 65536 ]] \
-      || { echo "zenduo-helper: $src is ${size} bytes — refusing (expected 1-65536)" >&2; exit 65; }
-    head_line="$(head -c 64 "$src" | head -n1)"
+      || { echo "zenduo-helper: $src is empty or over 65536 bytes — refusing" >&2; exit 65; }
+    [ "$read_rc" = 0 ] || { echo "zenduo-helper: could not read $src (rc=$read_rc)" >&2; exit 65; }
+    head_line="$(head -c 64 "$copy" | head -n1)"
     case "$head_line" in
       '<monitors version="2">'*) ;;
       *) echo "zenduo-helper: $src does not start with <monitors version=\"2\"> — refusing" >&2; exit 65 ;;
     esac
     # Captured, then matched: a pipe into grep -q under pipefail returns 141
     # on a file big enough to fill the pipe (docs/DESIGN.md).
-    specials="$(grep -c -e '<!' -e '<?' "$src" || true)"
+    specials="$(grep -c -e '<!' -e '<?' "$copy" || true)"
     [ "$specials" = 0 ] \
       || { echo "zenduo-helper: $src contains a doctype, comment or processing instruction — refusing" >&2; exit 65; }
-    tags="$(grep -oE '</?[a-zA-Z]+' "$src" | tr -d '</' | sort -u)"
+    tags="$(grep -oE '</?[a-zA-Z]+' "$copy" | tr -d '</' | sort -u)"
     for tag in $tags; do
       found=0
       for known in $XML_TAGS; do
@@ -105,32 +160,12 @@ case "${1:-}" in
       [ "$found" = 1 ] || { echo "zenduo-helper: $src has an unknown element <$tag> — refusing" >&2; exit 65; }
     done
 
-    gdm_home="$(getent passwd gdm 2>/dev/null | cut -d: -f6 || true)"
-    [ -n "$gdm_home" ] || { echo "zenduo-helper: no gdm account — the login screen is not GDM's to set" >&2; exit 66; }
-    dst_dir="$gdm_home/.config"
-    dst="$dst_dir/monitors.xml"
-    install -d -o gdm -g gdm -m 0755 "$dst_dir"
-    # Back up the greeter's own file once, and leave a marker when there was
-    # none, so uninstall.sh can tell "restore theirs" from "remove ours".
-    if [ ! -e "$dst.zenduo-backup" ] && [ ! -e "$dst.zenduo-installed" ]; then
-      if [ -e "$dst" ]; then
-        cp -a "$dst" "$dst.zenduo-backup"
-        say "kept the login screen's own layout as $dst.zenduo-backup"
-      else
-        : > "$dst.zenduo-installed"
-        chown gdm:gdm "$dst.zenduo-installed"
-      fi
-    fi
-    if cmp -s "$src" "$dst" 2>/dev/null; then
-      say "login screen layout already up to date"
-      exit 0
-    fi
-    tmp="$(mktemp "$dst_dir/.monitors.xml.XXXXXX")"
-    cat "$src" > "$tmp"
-    chown gdm:gdm "$tmp"
-    chmod 0644 "$tmp"
-    mv -f "$tmp" "$dst"
-    say "login screen will use the remembered layouts ($dst)"
+    IFS=: read -r _ _ gdm_uid gdm_gid _ gdm_home _ <<<"$(getent passwd gdm 2>/dev/null || true)"
+    [[ -n "$gdm_home" && "$gdm_uid" =~ ^[0-9]+$ && "$gdm_gid" =~ ^[0-9]+$ ]] \
+      || { echo "zenduo-helper: no gdm account — the login screen is not GDM's to set" >&2; exit 66; }
+    # Every write in the greeter's home happens as gdm. Root writing there
+    # would follow any symlink the gdm account left in its own directory.
+    as_user "$gdm_uid" "$gdm_gid" bash -c "$GDM_INSTALL" zenduo-helper "$gdm_home/.config" "$quiet" < "$copy"
     ;;
   *)
     usage

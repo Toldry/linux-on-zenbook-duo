@@ -92,16 +92,27 @@ system_half() {
   systemctl daemon-reload
   # The login screen's copy of the layout memory (duo layout login). Restore
   # the greeter's own file if it had one; remove ours if it did not.
-  gdm_home="$(getent passwd gdm 2>/dev/null | cut -d: -f6 || true)"
+  # This runs as gdm, like the helper that wrote the files. Root renaming and
+  # removing files in gdm's own directory would follow a symlink gdm left there.
+  local gdm_uid gdm_gid gdm_home gdm_done
+  IFS=: read -r _ _ gdm_uid gdm_gid _ gdm_home _ <<<"$(getent passwd gdm 2>/dev/null || true)"
   if [ -n "$gdm_home" ]; then
-    if [ -e "$gdm_home/.config/monitors.xml.zenduo-backup" ]; then
-      mv -f "$gdm_home/.config/monitors.xml.zenduo-backup" "$gdm_home/.config/monitors.xml"
-      rm -f "$gdm_home/.config/monitors.xml.zenduo-installed"
-      log "restored the login screen's own monitors.xml"
-    elif [ -e "$gdm_home/.config/monitors.xml.zenduo-installed" ]; then
-      rm -f "$gdm_home/.config/monitors.xml" "$gdm_home/.config/monitors.xml.zenduo-installed"
-      log "removed the login screen layout this project installed"
-    fi
+    # shellcheck disable=SC2016 # the script expands its own $1, as gdm
+    gdm_done="$(setpriv --reuid="$gdm_uid" --regid="$gdm_gid" --init-groups --no-new-privs -- bash -c '
+      set -eu
+      d="$1/.config"
+      if [ -e "$d/monitors.xml.zenduo-backup" ]; then
+        mv -f -- "$d/monitors.xml.zenduo-backup" "$d/monitors.xml"
+        rm -f -- "$d/monitors.xml.zenduo-installed"
+        echo restored
+      elif [ -e "$d/monitors.xml.zenduo-installed" ]; then
+        rm -f -- "$d/monitors.xml" "$d/monitors.xml.zenduo-installed"
+        echo removed
+      fi' uninstall "$gdm_home")"
+    case "$gdm_done" in
+      restored) log "restored the login screen's own monitors.xml" ;;
+      removed) log "removed the login screen layout this project installed" ;;
+    esac
   fi
   rm -f /etc/sudoers.d/zenduo /usr/local/sbin/zenduo-helper
   if [ -e /etc/udev/rules.d/70-zenduo.rules ]; then
