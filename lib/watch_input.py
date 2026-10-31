@@ -22,6 +22,9 @@ import select
 import struct
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from textsafe import printable  # noqa: E402  (same directory)
+
 # struct input_event { struct timeval time; __u16 type, code; __s32 value; }
 # 64-bit: timeval = 2x long (8+8), then H H i -> 24 bytes, native alignment.
 EV_FMT = "llHHi"
@@ -65,7 +68,8 @@ def asus_event_devices():
                     if tok.startswith("Vendor="):
                         vendor = tok.split("=", 1)[1].lower()
             elif line.startswith("N:"):
-                name = line.split("=", 1)[-1].strip().strip('"')
+                # The device names itself, and this runs as root in a terminal.
+                name = printable(line.split("=", 1)[-1].strip().strip('"'))
             elif line.startswith("H:"):
                 for tok in line.replace("Handlers=", "").split():
                     if tok.startswith("event"):
