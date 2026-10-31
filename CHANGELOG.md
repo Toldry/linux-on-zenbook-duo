@@ -4,6 +4,26 @@ Every release of linux-on-zenbook-duo, newest first. CI writes this file from
 [`changelog.d/`](changelog.d/README.md) after each merge; do not edit it by
 hand. `duo version` prints the release you have.
 
+## 0.14.0 — 2026-10-31
+
+### Battery Care Mode is a switch, as in MyASUS
+
+- the window's Battery Care Mode is now on or off instead of a number to
+  type: on stops charging at 80 %, off charges to 100 %. It is applied at
+  once and kept across reboots (it turns the bat-limit login re-apply on).
+  A limit set by hand with `duo config set BATTERY_LIMIT` still works and
+  shows as on, with its number
+
+### Fn+F's fan mode no longer moves GNOME's Power Mode
+
+- the fan mode (Standard, Whisper, Performance) and GNOME's Power Mode are
+  now two separate settings, as MyASUS's fan mode and Windows' power mode
+  are: the system install starts power-profiles-daemon with
+  `--block-driver=platform_profile`, so Power Mode only sets the CPU's
+  energy preference and the fan mode is Fn+F's alone.
+  `--no-separate-fan` links them again. Seen linked on the laptop
+  (Ubuntu 26.04.1, daemon 0.30); the separation is not yet run on it
+
 ## 0.13.0 — 2026-10-31
 
 ### home-manager can set F7 and F8
