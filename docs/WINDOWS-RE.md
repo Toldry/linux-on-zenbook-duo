@@ -314,6 +314,11 @@ be a step: the capture would stop at the restart. Do it by hand:
 **GUESS, about 60 %**: the setting is the `APU_MEM` id, `0x000600c1`, which
 asus-wmi already knows.
 
+Measured 2026-10-31: on this unit the setting does not survive the restart
+at all (8 GB and 1 GB both came back as "Automatic"), and no hooked ASUS
+process made a BIOS call for it, so this recipe found nothing to copy. See
+HARDWARE.md, "What MyASUS does".
+
 Optional: to look for BIOS settings that nobody has named, run this once:
 
 ```powershell

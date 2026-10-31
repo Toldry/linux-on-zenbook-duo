@@ -170,6 +170,16 @@ The process doing all of it is `AsusOptimization.exe`.
   docked the day before. **GUESS, about 70 %**: the third byte is the
   keyboard's battery percentage (0x63 = 99, 0x64 = 100). That does not
   explain `5a 3d 05 09`, seen on Linux.
+- **Memory Allocated to GPU does not work from MyASUS on this unit.** Set
+  from "Automatic" to 8 GB, then to 1 GB, each time confirmed with MyASUS's
+  "Reboot now": after the restart it read "Automatic" again both times.
+  Picking a size and pressing Cancel on the reboot prompt made no ATK call
+  in any hooked ASUS process, and neither did "Reboot now" up to the
+  restart; the BIOS ids MyASUS uses elsewhere did not change. So the write,
+  if any, happens in a driver or during shutdown, out of the hooks' reach,
+  and it does not stick. The GUESS that it is `APU_MEM` (`0x000600c1`) is
+  unconfirmed. Nothing to copy: on Linux the iGPU's share is the BIOS
+  setup's, and the i915/xe driver allocates the rest dynamically.
 - **Not seen yet:** the attach handshake (the `attach` scenario was not run),
   the display and audio settings.
 
