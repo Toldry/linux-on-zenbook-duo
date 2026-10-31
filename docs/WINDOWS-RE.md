@@ -417,7 +417,7 @@ What is known, what the kit assumes, and how sure that is.
 | 2 | Backlight over Bluetooth | Windows sends the same `5a ba c5 c4` bytes over Bluetooth (measured 2026-10-31) | `capture.py`, `keyboard-bluetooth` | Whether the keyboard accepts them: on-air answers need BTVS |
 | 3 | Backlight idle timeout | Linux does it in `watch-fn`; no host write seen in 90 s on Windows (2026-10-31) | `capture.py`, both keyboard scenarios (a 90 s hands-off step) | Whether the shortest MyASUS time is under 90 s |
 | 4 | Fn-lock | Settled 2026-10-31: the host sends `5a d0 4e <0/1>` (HARDWARE.md) | Done | Linux has to send it (PLAN Q) |
-| 5 | Codes `7c`, `7e`, `86`, `3d` | `7c` F9, `7e` F11, `86` F12, `9d` Fn+F measured 2026-10-31 | `capture.py`, both keyboard scenarios | `3d`'s third byte as battery %: **GUESS, about 70 %** |
+| 5 | Codes `7c`, `7e`, `86`, `3d` | `7c` F9, `7e` F11, `86` F12, `9d` Fn+F measured 2026-10-31 | `capture.py`, both keyboard scenarios | `3d`'s third byte as battery %: about 85 % (99 % in Settings matched `5a 3d 63`, 2026-10-31); `5a 3d 05 09` on Linux unexplained |
 | 6 | Fan profiles | `platform_profile` present, unwired (PLAN T) | `atk_query` diff, `hook_asus` | Fan curves set by a driver straight to the EC are invisible: see below |
 | 7 | Battery modes | `charge_control_end_threshold` works | `atk_query` diff | Whether MyASUS re-sends at each boot (hooks attach too late to see it) |
 | 8 | Speaker voicing | Fitted by ear and DMIC shape (`speaker_dsp.py`) | `speaker_response` | Mic colour; APO is level-dependent, so the curve is a slice |
