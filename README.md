@@ -191,7 +191,8 @@ duo --snapshot logs      # one frame of a view as plain text, for a bug report
 
 Six views, picked with `1`-`6` or Tab:
 
-- **Overview**: panels, keyboard, dock policy, backlights, battery limit,
+- **Overview**: panels, keyboard, dock policy, backlights, laptop and keyboard
+  battery, battery limit,
   speaker amps, every daemon's state, and the last warnings and errors from
   the journal. `k` sets the keyboard backlight, `b` the battery limit,
   `a` enforces the dock policy once, `B` switches the Bluetooth headset
@@ -222,7 +223,8 @@ of the view you are on.
 The same things in a GNOME window: `duo gui`, **Zenbook Duo** in the app
 grid, or **F12**. Press F12 again while the window has focus and it closes.
 
-- **Overview**: the panels, keyboard, backlights and battery limit; buttons
+- **Overview**: the panels, keyboard, backlights, laptop and keyboard battery
+  and battery limit; buttons
   for the panel sets, the four Win+P layouts and brightness; dark style and
   the keyboard backlight level; the last problems from the journal.
 - **Features**: every daemon with its state and an on/off switch
