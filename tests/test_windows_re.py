@@ -443,6 +443,16 @@ class OtherTools(unittest.TestCase):
         self.assertIn("+ registry: k\\new = 1:'y'", lines)
         self.assertIn('    +{"fan": 2}', lines)
 
+    def test_uefi_calls_are_named(self):
+        import hook_asus
+        event = {"type": "call", "api": "UefiSetVariable", "name": "Setup",
+                 "guid": "{ec87d643-eba4-4bb5-a1e5-3f3e36b20da9}", "data": "0108",
+                 "ok": False, "status": "0xc0000022", "process": "AsusOptimization.exe"}
+        self.assertEqual(hook_asus.event_kind(event), "UEFI write")
+        self.assertEqual(analyze.describe(event),
+                         "UEFI set Setup {ec87d643-eba4-4bb5-a1e5-3f3e36b20da9} = 0108"
+                         " (failed 0xc0000022)  [AsusOptimization.exe]")
+
     def test_extcap_interfaces(self):
         text = ("extcap {version=1.5.4.0}\n"
                 "interface {value=\\\\.\\USBPcap1}{display=USBPcap1}\n"

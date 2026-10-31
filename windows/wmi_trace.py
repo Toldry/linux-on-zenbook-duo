@@ -119,7 +119,7 @@ def main(argv=None):
     only = zenduo_re.selected_steps(args)
 
     if args.parse:
-        with open(args.parse, encoding="utf-8") as f:
+        with open(args.parse, encoding="utf-8-sig") as f:     # PowerShell adds a BOM
             for e in interesting(parse_events(f.read())):
                 print(e["time"], e["data"].get("ClientProcessId", "?"),
                       e["data"].get("Operation", e["data"]))

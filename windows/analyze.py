@@ -27,6 +27,7 @@ import struct
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import hook_asus  # noqa: E402
 import zenduo_re  # noqa: E402
 
 LINKTYPE_USBPCAP = 249
@@ -267,6 +268,8 @@ def describe(event):
             return f"{d.get('ioctl', d.get('kind'))} in={event.get('in')} out={event.get('out')}"
         if api == "CreateFileW":
             return f"open {event.get('path')}  [{event.get('process')}]"
+        if api and api.startswith("Uefi"):
+            return f"{hook_asus.describe_uefi(event)}  [{event.get('process')}]"
         data = event.get("in") if "Set" in (api or "") else event.get("out")
         return f"{api} {data}  {event.get('meaning', '')}  [{event.get('process')}]"
     if kind == "atk-change":

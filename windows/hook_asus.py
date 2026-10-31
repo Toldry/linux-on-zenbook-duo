@@ -18,7 +18,9 @@ hooks, in user space:
     charge limit, ...) and HID class IOCTLs, with both buffers;
   * hid.dll HidD_SetFeature / HidD_GetFeature / HidD_SetOutputReport /
     HidD_GetInputReport: keyboard commands, whatever the transport. This is
-    the one view that covers Bluetooth without an air sniffer.
+    the one view that covers Bluetooth without an air sniffer;
+  * ntdll NtSetSystemEnvironmentValueEx / NtQuerySystemEnvironmentValueEx:
+    UEFI variables, for settings the BIOS applies at the next boot.
 
 Each call is written to hooks.jsonl, and one readable line to events.log, with
 the ATK calls decoded on the spot (zenduo_re.decode_ioctl). The screen shows
@@ -151,6 +153,48 @@ for (const name of ['HidD_SetFeature', 'HidD_GetFeature',
     }
   });
 }
+// UEFI variables: a setting the BIOS applies at boot ("Memory Allocated to
+// GPU" needs a restart) may be written as a firmware variable, not through
+// ATKACPI. Every Win32 path (SetFirmwareEnvironmentVariable[Ex]W) ends in
+// these two ntdll calls.
+function guidText(ptr) {
+  if (ptr.isNull()) return '';
+  const b = new Uint8Array(ptr.readByteArray(16));
+  const h = (i) => ('0' + b[i].toString(16)).slice(-2);
+  const le = (idx) => idx.map(h).join('');
+  return '{' + le([3, 2, 1, 0]) + '-' + le([5, 4]) + '-' + le([7, 6]) + '-' +
+         le([8, 9]) + '-' + le([10, 11, 12, 13, 14, 15]) + '}';
+}
+function unicodeString(ptr) {
+  if (ptr.isNull()) return '';
+  const len = ptr.readU16();
+  const buf = ptr.add(Process.pointerSize).readPointer();
+  return buf.isNull() ? '' : buf.readUtf16String(len / 2);
+}
+for (const [name, write] of [['NtSetSystemEnvironmentValueEx', true],
+                             ['NtQuerySystemEnvironmentValueEx', false]]) {
+  const p = exp('ntdll.dll', name);
+  if (!p) continue;
+  Interceptor.attach(p, {
+    onEnter(args) {
+      this.name = unicodeString(args[0]);
+      this.guid = guidText(args[1]);
+      this.value = args[2];
+      this.lenPtr = args[3];
+      this.len = write ? args[3].toUInt32() : 0;
+      this.attributes = write ? args[4].toUInt32() : 0;
+      this.data = write ? hex(args[2], this.len) : '';
+    },
+    onLeave(ret) {
+      let data = this.data;
+      if (!write && ret.toInt32() === 0 && !this.lenPtr.isNull())
+        data = hex(this.value, this.lenPtr.readU32());
+      send({api: write ? 'UefiSetVariable' : 'UefiGetVariable', name: this.name,
+            guid: this.guid, attributes: this.attributes, data: data,
+            ok: ret.toInt32() === 0, status: '0x' + (ret.toInt32() >>> 0).toString(16)});
+    }
+  });
+}
 send({api: 'ready'});
 """
 
@@ -178,6 +222,14 @@ def enrich(payload):
     return payload
 
 
+def describe_uefi(event):
+    """One line for a firmware-variable call the agent saw."""
+    verb = "set" if event["api"] == "UefiSetVariable" else "read"
+    return (f"UEFI {verb} {event.get('name')} {event.get('guid')}"
+            f" = {event.get('data') or '-'}"
+            f"{'' if event.get('ok') else ' (failed ' + str(event.get('status')) + ')'}")
+
+
 def summary_line(payload):
     api = payload.get("api")
     if api == "DeviceIoControl":
@@ -193,6 +245,8 @@ def summary_line(payload):
         return f"{api} {data} [{payload['path']}] {payload.get('meaning', '')}"
     if api == "CreateFileW":
         return f"open {payload['path']}"
+    if api and api.startswith("Uefi"):
+        return describe_uefi(payload)
     return api or ""
 
 
@@ -206,6 +260,10 @@ def event_kind(payload):
         return "HID write"
     if api.startswith("HidD_Get"):
         return "HID read"
+    if api == "UefiSetVariable":
+        return "UEFI write"
+    if api == "UefiGetVariable":
+        return "UEFI read"
     return None
 
 
