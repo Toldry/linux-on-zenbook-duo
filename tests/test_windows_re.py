@@ -316,6 +316,35 @@ class Sessions(unittest.TestCase):
                 for event in group["events"]:
                     self.assertIsInstance(analyze.describe(event), str)
 
+    def test_atk_changes_per_step(self):
+        before = {0x00120075: 0x00010000, 0x00120057: 0x00010050, 0x00050001: None}
+        after = {0x00120075: 0x00010001, 0x00120057: 0x00010050, 0x00050001: 0x00010000,
+                 0x00999999: 5}         # first seen now: a baseline, not a change
+        changes = zenduo_re.atk_changes(before, after)
+        self.assertEqual([c["device_id"] for c in changes], ["0x00050001", "0x00120075"])
+        self.assertEqual(zenduo_re.describe_atk_change(changes[1]),
+                         "THROTTLE_THERMAL_POLICY (0x00120075): 0x00010000 -> 0x00010001")
+        self.assertEqual(changes[0]["before"], "failed")
+
+    def test_atk_change_records_join_the_timeline(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for name, records in {
+                "markers.jsonl": [{"type": "marker", "label": "fan", "ts": 1}],
+                "atk-changes.jsonl": [{"type": "atk-change", "ts": 2,
+                                       "device_id": "0x00120075",
+                                       "device": "THROTTLE_THERMAL_POLICY",
+                                       "before": "0x00010000", "after": "0x00010001",
+                                       "linux": ["echo 0x00120075 | sudo tee x"]}],
+            }.items():
+                with open(os.path.join(tmp, name), "w") as f:
+                    f.writelines(json.dumps(r) + "\n" for r in records)
+            groups = analyze.timeline([tmp])
+            self.assertEqual(groups[0]["label"], "fan")
+            self.assertIn("BIOS value changed: THROTTLE_THERMAL_POLICY",
+                          analyze.describe(groups[0]["events"][0]))
+            self.assertEqual(analyze.linux_hints(groups[0]["events"]),
+                             ["echo 0x00120075 | sudo tee x"])
+
     def test_atk_diff(self):
         with tempfile.TemporaryDirectory() as tmp:
             for name, value in (("a", "0x00010000"), ("b", "0x00010002")):

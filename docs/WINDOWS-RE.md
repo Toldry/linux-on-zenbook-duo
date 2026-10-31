@@ -105,10 +105,10 @@ Before any run, turn Windows Fast Startup off if you have not already:
 
 | Script | Answers | Changes anything? |
 |---|---|---|
-| `capture.py` | Runs the next four together in one window and walks a scenario: the one to use for recipes 1 and 2 | Enables and disables one Windows log |
+| `capture.py` | Runs the hooks, HID listener, USB capture and WMI trace together in one window, walks a scenario, and reads the BIOS settings after each step: the one to use for recipes 1 and 2 | Enables and disables one Windows log |
 | `inventory.py` | Which ASUS services, drivers, packages, WMI classes and audio effects are installed, with versions and SHA-256 hashes | No |
 | `hook_asus.py` | Which ATK calls and HID reports the ASUS processes make, per action | No (it injects a read-only hook) |
-| `atk_query.py` | Which ATK device ids exist on this BIOS, and their current values | No (DSTS only) |
+| `atk_query.py` | Which ATK device ids exist on this BIOS, and their current values; `--save`/`--compare` for a change across a restart | No (DSTS only) |
 | `hid_probe.py` | The keyboard's HID collections as Windows sees them; reading report 0x5a; listening to vendor input | `send` only, guarded |
 | `usb_capture.py` | What actually crosses the pogo USB link, including Windows' own traffic on attach, and STALLs | No |
 | `wmi_trace.py` | Which WMI methods are called, for the calls that bypass the processes | Enables and disables one Windows log |
@@ -222,30 +222,76 @@ Linux.
 
 ### 2. Fan profile, battery limit, other BIOS settings
 
+One run of `capture.py` covers this. After every step it reads the BIOS
+settings again and names the one that step changed, so there is nothing to
+compare by hand.
+
+1. Plug the charger in. Performance mode is only offered on the charger.
+2. Open MyASUS.
+3. In an Administrator PowerShell, in the `windows\` folder, run:
+
+   ```powershell
+   py capture.py --scenario power
+   ```
+
+4. Check the list it prints before step 1. The line `BIOS read: … settings
+   read after every step` must have a green ✓. A red ✗ there usually means
+   the window is not an Administrator one.
+5. Press Enter to start, then follow the steps on screen (18 of them, about
+   5 minutes). Each one is a single click in MyASUS or Windows Settings, or
+   one Fn+F press.
+6. After a step that changed a BIOS setting, a cyan line appears under the
+   green one, for example (the values here are made up):
+
+   ```
+   ✓ caught: 2 ATK calls
+     BIOS changed: THROTTLE_THERMAL_POLICY (0x00120075): 0x00010000 -> 0x00010001
+   ```
+
+   A step without that line changed nothing the BIOS reports. That is
+   expected for the Windows power-mode steps, and worth noting for any
+   MyASUS one.
+7. When the last step is done, send `timeline.txt` from the session folder
+   that it names. That file holds every step's calls, the BIOS changes, and
+   the matching Linux commands.
+
+**Memory Allocated to GPU** takes effect only after a restart, so it cannot
+be a step: the capture would stop at the restart. Do it by hand:
+
+1. In an Administrator PowerShell, in `windows\`, run:
+
+   ```powershell
+   py atk_query.py --save before-gpu
+   ```
+
+2. In MyASUS > Device Settings > Power & Performance > Memory Allocated to
+   GPU, pick a different amount. Note the old one.
+3. Restart Windows when MyASUS asks.
+4. After the restart, in an Administrator PowerShell, in `windows\`, run:
+
+   ```powershell
+   py atk_query.py --compare before-gpu
+   ```
+
+   It prints only the settings that changed, with old and new values.
+   Send that output.
+5. Put the setting back and restart again.
+
+**GUESS, about 60 %**: the setting is the `APU_MEM` id, `0x000600c1`, which
+asus-wmi already knows.
+
+Optional: to look for BIOS settings that nobody has named, run this once:
+
 ```powershell
-py atk_query.py --json before.json
+py atk_query.py --range 0x00120000 0x001200ff
 ```
 
-Then change one setting in MyASUS (for example, fan profile to Whisper) and
-run:
+It lists every id in that range the BIOS answers for.
 
-```powershell
-py atk_query.py --json after.json
-```
+#### On the Linux side (not part of the capture)
 
-```powershell
-py analyze.py atk-diff before.json after.json
-```
-
-That names the device id and both values, which is often enough on its own.
-To see the calls themselves, and whether they go through ATKACPI or WMI:
-
-```powershell
-py capture.py --scenario power
-```
-
-`timeline.txt` in the session folder then has the Linux replay for every
-DEVS call. On Ubuntu:
+`timeline.txt` gives the debugfs commands that repeat each call on Ubuntu,
+for example:
 
 ```bash
 echo 0x00110019 | sudo tee /sys/kernel/debug/asus-nb-wmi/dev_id
@@ -259,18 +305,6 @@ the thermal policy, or `charge_control_end_threshold` for RSOC. The capture
 then only tells you which MyASUS name maps to which value. **Watch the
 order**: asus-wmi maps the Vivobook/Zenbook thermal ids in a different order
 from the ROG ones (read in drivers/platform/x86/asus-wmi.c).
-
-"Memory Allocated to GPU" (Power & Performance) is not in the `power`
-scenario, because it only takes effect after a restart. To capture it, run
-`atk_query.py --json before.json`, change the setting, restart, then run
-`atk_query.py --json after.json` and diff the two. **GUESS, about 60 %**:
-it is the `APU_MEM` id, `0x000600c1`, which asus-wmi already knows.
-
-To find ids that nobody has named:
-
-```powershell
-py atk_query.py --range 0x00120000 0x001200ff
-```
 
 ### 3. Where a setting lives
 

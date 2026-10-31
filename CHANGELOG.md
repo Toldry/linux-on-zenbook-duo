@@ -15,6 +15,10 @@
   stream in `events.log` instead of on screen. The keyboard is captured in
   two runs, docked and on Bluetooth, and each step waits until Windows sees
   the keyboard in the right place
+- `capture.py` also reads the BIOS settings after every step and prints the
+  one the step changed, old and new value, so the fan-profile and battery
+  recipe needs no separate before/after commands. `atk_query.py --save NAME`
+  and `--compare NAME` cover the one setting that needs a restart
 
 ### The keyboard light goes dark when you stop typing on Bluetooth
 

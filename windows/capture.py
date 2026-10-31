@@ -14,7 +14,10 @@ Run from an Administrator terminal. This starts, together:
   * a USB capture of every root hub (usb_capture.UsbCapture), when USBPcap is
     installed, for what crosses the pogo pins (skipped over Bluetooth);
   * the WMI activity trace (wmi_trace.WmiTrace), for BIOS calls that go
-    through the WMI service instead of the hooked processes.
+    through the WMI service instead of the hooked processes;
+  * a read of the BIOS settings after every step (atk_query.AtkReader, DSTS
+    only), which names the setting a step changed and its old and new value
+    even when the call that changed it was not seen.
 
 Then it walks the scenario one step at a time. The screen shows only the
 steps and, after each, what was caught during it; every event goes to
@@ -24,7 +27,7 @@ state by mistake. At the end everything is stopped and timeline.txt (the
 analyze.py output) is written next to the raw files.
 
 Any part that cannot start is reported before step 1 and the rest still run;
---no-hooks, --no-hid, --no-usb and --no-wmi leave a part out on purpose.
+--no-hooks, --no-hid, --no-usb, --no-wmi and --no-atk leave a part out.
 """
 
 import argparse
@@ -54,6 +57,8 @@ def main(argv=None):
     parser.add_argument("--no-hid", action="store_true", help="leave out the HID listener")
     parser.add_argument("--no-usb", action="store_true", help="leave out the USB capture")
     parser.add_argument("--no-wmi", action="store_true", help="leave out the WMI trace")
+    parser.add_argument("--no-atk", action="store_true",
+                        help="leave out the BIOS read after each step")
     parser.add_argument("--all-ioctls", action="store_true",
                         help="hooks log every DeviceIoControl (noisy)")
     parser.add_argument("--interface", action="append",
@@ -66,6 +71,7 @@ def main(argv=None):
             print(f"{name:<20} {len(plan['steps']):>3} steps  {plan['title']}")
         return 0
     zenduo_re.require_windows("capture")
+    import atk_query
     import hid_probe
     import hook_asus
     import usb_capture
@@ -128,6 +134,15 @@ def main(argv=None):
             parts["wmi"] = trace
             ok("WMI trace: on (read back at the end)")
 
+    if not args.no_atk:
+        try:
+            parts["atk"] = atk_query.AtkReader()
+        except OSError as error:
+            bad(f"BIOS read: {error}")
+        else:
+            ok(f"BIOS read: {len(zenduo_re.ATK_DEVICE_IDS)} settings read after every"
+               " step, plus any the hooks see")
+
     time.sleep(2.0)       # first hook and HID scans
     if "hooks" in parts:
         hooked = parts["hooks"].hooked()
@@ -159,13 +174,37 @@ def main(argv=None):
                        " not to this screen"))
 
     usb_before = [0]
+    atk_log = zenduo_re.JsonLog(os.path.join(out, "atk-changes.jsonl"))
+    atk_now = {}
 
-    def after_step(_index):
+    def watched_ids():
+        found = parts["hooks"].atk_ids if "hooks" in parts else set()
+        return sorted(set(zenduo_re.ATK_DEVICE_IDS) | found)
+
+    if "atk" in parts:
+        atk_now.update(parts["atk"].values(watched_ids()))
+
+    def after_step(index):
         summary = zenduo_re.count_summary(events.take_counts())
         if "usb" in parts:
             now = parts["usb"].bytes_written()
             grown, usb_before[0] = now - usb_before[0], now
             summary += f"; USB +{grown / 1000:.1f} kB"
+        if "atk" in parts:
+            # Read the BIOS again and name what this step changed: the same
+            # before/after comparison as atk_query.py, once per step.
+            after = parts["atk"].values(watched_ids())
+            changes = zenduo_re.atk_changes(atk_now, after)
+            atk_now.update(after)
+            for change in changes:
+                linux = zenduo_re.linux_equivalent_atk(
+                    {"method": "DSTS", "device_id": change["device_id"]})
+                atk_log.write({"type": "atk-change", "step": index, "linux": linux,
+                               **change})
+                events.add(None, "BIOS changed: " + zenduo_re.describe_atk_change(change))
+            if changes:
+                summary += "\n  " + paint("do", "BIOS changed: " + "; ".join(
+                    zenduo_re.describe_atk_change(c) for c in changes))
         return "caught: " + summary
 
     try:
@@ -180,6 +219,9 @@ def main(argv=None):
         for error in parts["usb"].stop() if "usb" in parts else []:
             print(paint("warn", f"USB capture: {error}"))
         wmi_count = len(parts["wmi"].stop(out)) if "wmi" in parts else 0
+        if "atk" in parts:
+            parts["atk"].close()
+        atk_log.close()
         events.close()
         markers.close()
 

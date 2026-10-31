@@ -238,6 +238,7 @@ class HookSession:
         self.source = AGENT_JS % {"all_ioctls": "true" if all_ioctls else "false"}
         self.sessions = {}          # pid -> frida session, or None if it failed
         self.names = {}
+        self.atk_ids = set()        # every device id seen in a DSTS/DEVS call
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._scan_forever, daemon=True)
@@ -266,6 +267,9 @@ class HookSession:
             payload = enrich(dict(message["payload"]))
             payload.update({"type": "call", "pid": pid, "process": name})
             self.log.write(payload)
+            device_id = payload.get("decoded", {}).get("device_id")
+            if device_id:
+                self.atk_ids.add(int(device_id, 16))
             if payload.get("api") != "ready":
                 self.events.add(event_kind(payload), f"{name}: {summary_line(payload)}")
         return handler

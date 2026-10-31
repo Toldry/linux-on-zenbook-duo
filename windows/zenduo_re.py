@@ -164,6 +164,32 @@ def linux_equivalent_atk(decoded):
     return lines
 
 
+def atk_changes(before, after):
+    """The device ids whose DSTS answer differs between two reads.
+
+    before and after map device id (int) to the 32-bit answer (int, or None
+    when the call failed). An id in only one read is not a change: capture.py
+    adds ids as the hooks discover them, and their first read is a baseline.
+    """
+    changes = []
+    for device in sorted(set(before) & set(after)):
+        if before[device] != after[device]:
+            changes.append({"device_id": f"0x{device:08x}",
+                            "device": ATK_DEVICE_IDS.get(device, "unknown"),
+                            "before": _hex32(before[device]),
+                            "after": _hex32(after[device])})
+    return changes
+
+
+def _hex32(value):
+    return "failed" if value is None else f"0x{value:08x}"
+
+
+def describe_atk_change(change):
+    return (f"{change['device']} ({change['device_id']}):"
+            f" {change['before']} -> {change['after']}")
+
+
 # ── HID ──────────────────────────────────────────────────────────────────────
 ASUS_VID = 0x0B05
 DUO_KEYBOARD_PID = 0x1B2C

@@ -201,11 +201,11 @@ def load_session(folder):
         path = os.path.join(folder, name)
         if os.path.exists(path):
             markers = [m for m in zenduo_re.read_jsonl(path) if m.get("type") == "marker"]
-    for name in ("hooks.jsonl", "hid-input.jsonl", "wmi.jsonl"):
+    for name in ("hooks.jsonl", "hid-input.jsonl", "wmi.jsonl", "atk-changes.jsonl"):
         path = os.path.join(folder, name)
         if os.path.exists(path):
             events += [e for e in zenduo_re.read_jsonl(path)
-                       if e.get("type") in ("call", "input", "wmi")
+                       if e.get("type") in ("call", "input", "wmi", "atk-change")
                        and e.get("api") not in ("ready",)]
     for path in glob.glob(os.path.join(folder, "*.pcap*")):
         try:
@@ -230,6 +230,8 @@ def describe(event):
             return f"open {event.get('path')}  [{event.get('process')}]"
         data = event.get("in") if "Set" in (api or "") else event.get("out")
         return f"{api} {data}  {event.get('meaning', '')}  [{event.get('process')}]"
+    if kind == "atk-change":
+        return f"BIOS value changed: {zenduo_re.describe_atk_change(event)}"
     if kind == "input":
         return f"HID input {event.get('data')}  {event.get('meaning', '')}"
     if kind == "wmi":
