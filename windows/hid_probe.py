@@ -373,6 +373,7 @@ class HidListener:
 
 
 def cmd_listen(args):
+    only = zenduo_re.selected_steps(args)
     out = zenduo_re.session_dir("hid-listen", args.out)
     log = zenduo_re.JsonLog(os.path.join(out, "hid-input.jsonl"))
     events = zenduo_re.EventLog(os.path.join(out, "events.log"))
@@ -382,7 +383,7 @@ def cmd_listen(args):
     time.sleep(1.0)
     print(f"listening on {len(listener.listening())} vendor collection(s);"
           f" each report goes to {events.path}")
-    zenduo_re.run_steps(markers, args.scenario,
+    zenduo_re.run_steps(markers, args.scenario, only=only,
                         detect=lambda: zenduo_re.keyboard_transport(present_paths()),
                         after_step=lambda _i: zenduo_re.count_summary(events.take_counts()))
     listener.stop()
@@ -429,6 +430,7 @@ def main(argv=None):
     p.add_argument("report_id", help="hex, e.g. 5a")
     p = sub.add_parser("listen")
     p.add_argument("--scenario", choices=sorted(zenduo_re.SCENARIOS))
+    p.add_argument("--steps", help=zenduo_re.STEPS_HELP)
     p.add_argument("--every-collection", action="store_true",
                    help="also try non-vendor collections (Windows usually refuses)")
     p.add_argument("--out", help="parent folder for the session (default windows/captures)")

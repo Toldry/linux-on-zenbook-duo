@@ -325,9 +325,11 @@ def main(argv=None):
     parser.add_argument("--all-ioctls", action="store_true",
                         help="log every DeviceIoControl, not just ATK and HID (noisy)")
     parser.add_argument("--scenario", choices=sorted(zenduo_re.SCENARIOS))
+    parser.add_argument("--steps", help=zenduo_re.STEPS_HELP)
     parser.add_argument("--rescan", type=float, default=5.0, help="seconds between scans")
     parser.add_argument("--out", help="parent folder for the session (default windows/captures)")
     args = parser.parse_args(argv)
+    only = zenduo_re.selected_steps(args)
     frida = import_frida()
 
     if args.list:
@@ -347,7 +349,7 @@ def main(argv=None):
                         " Administrator terminal, and is MyASUS installed?"
                         " Scanning continues."))
     print(f"each call goes to {events.path}")
-    zenduo_re.run_steps(markers, args.scenario,
+    zenduo_re.run_steps(markers, args.scenario, only=only,
                         after_step=lambda _i: zenduo_re.count_summary(events.take_counts()))
     hooks.stop()
     log.close()

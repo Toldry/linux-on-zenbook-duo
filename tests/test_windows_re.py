@@ -155,6 +155,38 @@ class Markers(unittest.TestCase):
                                    after_step=lambda i: f"caught {i}")
         self.assertIn("✓ caught 1", out)
 
+    def test_r_redoes_the_step_before(self):
+        # Step 1 done, r on step 2 goes back to step 1, then 1 and 2 done, q.
+        n, records, out = self.run_steps("power", FakeKeys(["enter", "r", "enter",
+                                                            "enter", "q"]))
+        self.assertEqual(n, 3)
+        shown = [(m["step"], m.get("redo", False)) for m in records
+                 if "step" in m and not m.get("skipped")]
+        self.assertEqual(shown, [(1, False), (2, False), (1, True), (2, False), (3, False)])
+        self.assertIn("(again)", out)
+
+    def test_r_after_the_last_step_redoes_it(self):
+        n, records, _ = self.run_steps("power", FakeKeys(["enter", "r", "enter", "enter"]),
+                                       only=[4])
+        self.assertEqual(n, 2)
+        self.assertEqual([m["step"] for m in records if "step" in m], [4, 4])
+        self.assertEqual(records[-1]["label"], "capture stopped")
+
+    def test_only_some_steps(self):
+        n, records, out = self.run_steps("power", FakeKeys(["enter", "enter", "enter"]),
+                                         only=[5, 7])
+        self.assertEqual(n, 2)
+        self.assertEqual([m["step"] for m in records if "step" in m], [5, 7])
+        self.assertIn("STEP 5/18", out)
+
+    def test_step_selection(self):
+        self.assertEqual(zenduo_re.parse_step_selection("5", 18), [5])
+        self.assertEqual(zenduo_re.parse_step_selection("5-7, 12,6", 18), [5, 6, 7, 12])
+        self.assertEqual(zenduo_re.parse_step_selection("16-", 18), [16, 17, 18])
+        for bad in ("0", "19", "7-5", "x", ""):
+            with self.assertRaises(ValueError, msg=bad):
+                zenduo_re.parse_step_selection(bad, 18)
+
     def test_every_scenario_is_well_formed(self):
         for name, plan in zenduo_re.SCENARIOS.items():
             self.assertTrue(plan["steps"], name)

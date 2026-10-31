@@ -4,6 +4,8 @@ r"""Capture everything for one scenario, in one terminal.
     py capture.py --scenario keyboard-bluetooth
     py capture.py --scenario power
     py capture.py --list-scenarios
+    py capture.py --scenario power --list-steps     the numbered steps
+    py capture.py --scenario power --steps 4-6      run only those again
 
 Run from an Administrator terminal. This starts, together:
 
@@ -52,7 +54,10 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--scenario", choices=sorted(zenduo_re.SCENARIOS),
                         help="what to walk through; without it, type your own labels")
+    parser.add_argument("--steps", help=zenduo_re.STEPS_HELP)
     parser.add_argument("--list-scenarios", action="store_true")
+    parser.add_argument("--list-steps", action="store_true",
+                        help="print the numbered steps of --scenario, for --steps")
     parser.add_argument("--no-hooks", action="store_true", help="leave out the Frida hooks")
     parser.add_argument("--no-hid", action="store_true", help="leave out the HID listener")
     parser.add_argument("--no-usb", action="store_true", help="leave out the USB capture")
@@ -65,10 +70,17 @@ def main(argv=None):
                         help=r"USBPcap root hub, e.g. \\.\USBPcap1; default all")
     parser.add_argument("--out", help="parent folder for the session (default windows/captures)")
     args = parser.parse_args(argv)
+    only = zenduo_re.selected_steps(args)
 
     if args.list_scenarios:
         for name, plan in zenduo_re.SCENARIOS.items():
             print(f"{name:<20} {len(plan['steps']):>3} steps  {plan['title']}")
+        return 0
+    if args.list_steps:
+        if not args.scenario:
+            sys.exit("--list-steps needs --scenario")
+        for number, current in enumerate(zenduo_re.SCENARIOS[args.scenario]["steps"], 1):
+            print(f"{number:>3}. {current.do}")
         return 0
     zenduo_re.require_windows("capture")
     import atk_query
@@ -208,7 +220,8 @@ def main(argv=None):
         return "caught: " + summary
 
     try:
-        zenduo_re.run_steps(markers, args.scenario, detect=detect, after_step=after_step)
+        zenduo_re.run_steps(markers, args.scenario, only=only, detect=detect,
+                            after_step=after_step)
     except KeyboardInterrupt:
         markers.write({"type": "marker", "label": "capture stopped"})
     finally:

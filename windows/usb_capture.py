@@ -109,10 +109,12 @@ def main(argv=None):
                         help=r"e.g. \\.\USBPcap1; repeatable; default all")
     parser.add_argument("--list-interfaces", action="store_true")
     parser.add_argument("--scenario", choices=sorted(zenduo_re.SCENARIOS))
+    parser.add_argument("--steps", help=zenduo_re.STEPS_HELP)
     parser.add_argument("--usbpcap-arg", action="append", default=[],
                         help="extra argument for USBPcapCMD (repeatable)")
     parser.add_argument("--out", help="parent folder for the session (default windows/captures)")
     args = parser.parse_args(argv)
+    only = zenduo_re.selected_steps(args)
 
     exe = find_exe(args.exe)
     if not exe:
@@ -128,7 +130,7 @@ def main(argv=None):
     capture.start()
     print(f"capturing {', '.join(interfaces)}")
     try:
-        zenduo_re.run_steps(markers, args.scenario)
+        zenduo_re.run_steps(markers, args.scenario, only=only)
     finally:
         for error in capture.stop():
             print(error)

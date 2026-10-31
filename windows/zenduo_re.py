@@ -686,14 +686,53 @@ class ConsoleKeys:
         return self.stream.readline()
 
 
-def run_steps(log, scenario=None, keys=None, out=None, detect=None, after_step=None):
+def parse_step_selection(text, count):
+    """'5', '5-7,12' or '20-' -> sorted step numbers (1-based) within 1..count."""
+    chosen = set()
+    for part in text.replace(" ", "").split(","):
+        if not part:
+            continue
+        first, dash, last = part.partition("-")
+        try:
+            low = int(first)
+            high = (int(last) if last else count) if dash else low
+        except ValueError:
+            raise ValueError(f"'{part}' is not a step number or range like 5-7")
+        if not 1 <= low <= high <= count:
+            raise ValueError(f"'{part}' is outside steps 1-{count}")
+        chosen.update(range(low, high + 1))
+    if not chosen:
+        raise ValueError("no steps chosen")
+    return sorted(chosen)
+
+
+STEPS_HELP = ("run only these steps of the scenario, by the numbers it shows:"
+              " 5, 5-7,12 or 20- (from 20 to the end)")
+
+
+def selected_steps(args):
+    """The --steps choice of a parsed command line, or None for all steps."""
+    if not getattr(args, "steps", None):
+        return None
+    if not args.scenario:
+        sys.exit("--steps needs --scenario")
+    try:
+        return parse_step_selection(args.steps, len(SCENARIOS[args.scenario]["steps"]))
+    except ValueError as error:
+        sys.exit(f"--steps: {error}")
+
+
+def run_steps(log, scenario=None, keys=None, out=None, detect=None, after_step=None,
+              only=None):
     """Walk a scenario, writing one marker per step. Returns the steps done.
 
+    only lists the step numbers to run (parse_step_selection); default all.
     detect() names the keyboard's state ("docked", "bluetooth", "none") or
     returns None when it cannot tell; with it, keyboard-state steps end by
     themselves. after_step(index) is called when a step ends and may return a
     line to show (what was captured during it). Without a scenario, whatever
-    the user types is the label. The keys are Enter (done), s (skip), q (stop).
+    the user types is the label. The keys are Enter (done), s (skip), r (redo
+    the step before this one) and q (stop).
     """
     out = out or sys.stdout
     keys = keys or ConsoleKeys()
@@ -719,16 +758,39 @@ def run_steps(log, scenario=None, keys=None, out=None, detect=None, after_step=N
     if plan["keyboard"]:
         print(paint("warn", "For this whole run the keyboard must be "
                     f"{KEYBOARD_STATES[plan['keyboard']]}."), file=out)
-    print(paint("keys", "Keys: Enter = step done · s = skip step · q = stop"), file=out)
-    for index, current in enumerate(steps, 1):
+    print(paint("keys", "Keys: Enter = step done · s = skip step · r = redo the step"
+                " before · q = stop"), file=out)
+    order = only or list(range(1, len(steps) + 1))
+    if only:
+        print(paint("info", "Only steps " + ", ".join(map(str, only))), file=out)
+    position = 0
+    redo = False
+    while position <= len(order):
+        if position == len(order):
+            # A last chance to redo the final step before the capture stops.
+            print("\n  " + paint("keys", "Enter = finish · r = redo the last step"),
+                  file=out, end="", flush=True)
+            key = _until_key(keys)
+            print(file=out)
+            if key == "r":
+                position, redo = position - 1, True
+                continue
+            break
+        index = order[position]
+        current = steps[index - 1]
         tag = f"  [keyboard: {plan['keyboard']}]" if plan["keyboard"] else ""
-        print("\n" + paint("step", f" STEP {index}/{len(steps)} ") + paint("info", tag),
-              file=out)
+        again = "  (again)" if redo else ""
+        print("\n" + paint("step", f" STEP {index}/{len(steps)} ")
+              + paint("info", tag + again), file=out)
         print("  " + paint("do", current.do), file=out)
         if current.hint:
             print("  " + paint("hint", current.hint), file=out)
-        log.write({"type": "marker", "label": current.do, "step": index,
-                   "scenario": scenario})
+        marker = {"type": "marker", "label": current.do, "step": index,
+                  "scenario": scenario}
+        if redo:
+            marker["redo"] = True
+        log.write(marker)
+        redo = False
         if current.needs:
             outcome = _wait_for_state(current.needs, keys, out, paint, detect)
         elif plan["keyboard"] and detect and not _state_matches(
@@ -743,6 +805,15 @@ def run_steps(log, scenario=None, keys=None, out=None, detect=None, after_step=N
             outcome = _action(current, keys, out, paint)
         if outcome == "q":
             break
+        if outcome == "r":
+            if position == 0:
+                print("  " + paint("info", "no step before this one; this one again"),
+                      file=out)
+            else:
+                position -= 1
+            redo = True
+            continue
+        position += 1
         if outcome == "s":
             log.write({"type": "marker", "label": f"skipped: {current.do}",
                        "step": index, "skipped": True, "scenario": scenario})
@@ -769,17 +840,17 @@ def _action(current, keys, out, paint):
 def _until_key(keys):
     while True:
         key = keys.get()
-        if key in ("enter", "s", "q"):
+        if key in ("enter", "s", "r", "q"):
             return key
 
 
 def _countdown(seconds, keys, out, paint):
-    """A hands-off wait. Enter ends it early, s skips it, q stops."""
+    """A hands-off wait. Enter ends it early, s skips it, r goes back, q stops."""
     for remaining in range(seconds, 0, -1):
         print("\r  " + paint("keys", f"hands off: {remaining:>3} s left "), file=out,
               end="", flush=True)
         key = keys.get(1.0)
-        if key in ("enter", "s", "q"):
+        if key in ("enter", "s", "r", "q"):
             print(file=out)
             return key
     print(file=out)
@@ -809,7 +880,7 @@ def _wait_for_state(needs, keys, out, paint, detect):
                   file=out, end="", flush=True)
             shown = True
         key = keys.get(1.0)
-        if key in ("enter", "s", "q"):
+        if key in ("enter", "s", "r", "q"):
             print(file=out)
             return key
 

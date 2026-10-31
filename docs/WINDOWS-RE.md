@@ -130,7 +130,9 @@ says how many presses are left, for example "(backlight 2 of 4)".
   keyboard that way. Press Enter if it does not notice.
 - **A hands-off step** counts down by itself. Touch nothing until it ends.
 
-`s` skips a step and `q` stops. After each step a green line says what was
+`s` skips a step, `r` goes back and does the step before again (for
+example when a click went to the wrong switch), and `q` stops. After the last
+step, `r` redoes that one, and Enter finishes. After each step a green line says what was
 caught during it, for example `✓ caught: 1 HID write, 2 keyboard reports`.
 "caught: nothing" on a step that should have done something is worth a note
 in the issue. Every event goes to `events.log` in the session folder, not to
@@ -139,6 +141,22 @@ the screen. To watch it live, run this in a second window:
 ```powershell
 Get-Content captures\<session>\events.log -Wait
 ```
+
+To run some steps again later, list the numbers, then pick them with
+`--steps`:
+
+```powershell
+py capture.py --scenario power --list-steps
+```
+
+```powershell
+py capture.py --scenario power --steps 4-6
+```
+
+`--steps` takes one number (`5`), a list and ranges (`5-7,12`), or a start
+to the end (`20-`). Each run is its own session folder, so send its
+`timeline.txt` with the first one. Over a keyboard scenario, the steps still
+check that the keyboard is in the right place first.
 
 Without `--scenario`, type your own label and press Enter.
 

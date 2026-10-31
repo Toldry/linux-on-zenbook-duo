@@ -112,9 +112,11 @@ class WmiTrace:
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--scenario", choices=sorted(zenduo_re.SCENARIOS))
+    parser.add_argument("--steps", help=zenduo_re.STEPS_HELP)
     parser.add_argument("--parse", help="decode a saved export instead of recording")
     parser.add_argument("--out", help="parent folder for the session (default windows/captures)")
     args = parser.parse_args(argv)
+    only = zenduo_re.selected_steps(args)
 
     if args.parse:
         with open(args.parse, encoding="utf-8") as f:
@@ -131,7 +133,7 @@ def main(argv=None):
     if error:
         sys.exit(f"wmi_trace: {error}")
     try:
-        zenduo_re.run_steps(markers, args.scenario)
+        zenduo_re.run_steps(markers, args.scenario, only=only)
     finally:
         kept = trace.stop(out)
     for event in kept:

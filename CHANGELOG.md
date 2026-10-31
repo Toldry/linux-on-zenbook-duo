@@ -19,6 +19,8 @@
   one the step changed, old and new value, so the fan-profile and battery
   recipe needs no separate before/after commands. `atk_query.py --save NAME`
   and `--compare NAME` cover the one setting that needs a restart
+- in any step, `r` goes back and redoes the step before; `--steps 4-6` (with
+  `--list-steps` to see the numbers) runs only some steps again
 
 ### The keyboard light goes dark when you stop typing on Bluetooth
 
