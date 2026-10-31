@@ -46,6 +46,7 @@ import kb_init  # noqa: E402  (same directory; shares node discovery + handshake
 import kb_backlight  # noqa: E402  (same directory; owns the remembered level)
 import dock  # noqa: E402  (same directory; keyboard dock state)
 import uinput_keys  # noqa: E402  (same directory; virtual brightness keys)
+import battery  # noqa: E402  (same directory; where the keyboard's 5a 3d report is kept)
 
 DUO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                     "..", "bin", "duo-cli"))
@@ -482,6 +483,30 @@ def slept_since(last):
     return slept > 1.0, (mono, boot)
 
 
+BATTERY_CHECK_SECONDS = 60
+
+
+def check_kb_battery(alarm, notify=battery.notify):
+    """Pop up a warning when the keyboard battery drops through a low level.
+
+    Not while the kernel or UPower says it is charging; the 5a 3d report's
+    charging state is only a guess, so it never silences a warning.
+    """
+    reading = battery.keyboard_reading(battery.load_status(), battery.keyboard_sysfs(),
+                                       battery.keyboard_upower())
+    if reading is None:
+        return None
+    pct, state, source = reading
+    if state == "charging" and source != "report":
+        return None
+    level = alarm.update(pct)
+    if level is not None:
+        shown = notify(pct, source)
+        log(f"keyboard battery at {pct} % ({source}): below {level} %"
+            + ("" if shown else "; no popup (notify-send or the session bus missing)"))
+    return level
+
+
 def main():
     # Line-buffer stdout so kb_init's prints reach the journal when they happen.
     # Block-buffered through a pipe they sat unflushed for 37 minutes, arriving
@@ -498,6 +523,7 @@ def main():
     known = None
     clocks = None
     failures, retry_at = 0, 0.0
+    alarm, battery_at = battery.LowAlarm(), 0.0
     log(f"started (actions: {len(actions)} codes; map overrides honored)")
     while True:
         dispatcher.reap()
@@ -547,6 +573,8 @@ def main():
                 # seconds forever would poke the device far harder than intended.
                 if rc == 0 and fds:
                     known = nodes
+                    # A new connection: the last one's battery report is stale.
+                    battery.clear_status()
                     failures, retry_at = 0, 0.0
                     # The keyboard is back and initialised: give it its
                     # backlight back rather than leaving it dark until the
@@ -589,9 +617,15 @@ def main():
                 dispatcher.wake_backlight()
                 if is_vendor and actions.get(data[1]) == "kbd-backlight":
                     continue  # the press that wakes the backlight only wakes it
+            if is_vendor and data[1] == battery.STATUS_CODE:
+                battery.save_status(data)  # the window reads it: lib/battery.py
+                battery_at = 0.0  # check it now
             if is_vendor and data[1] != 0:
                 code = data[1]
                 dispatcher.dispatch(code, actions.get(code, f"unmapped-0x{code:02x}"))
+        if time.monotonic() >= battery_at:
+            battery_at = time.monotonic() + BATTERY_CHECK_SECONDS
+            check_kb_battery(alarm)
         # After the reads, so a key that arrived during the select counts.
         if idle.due(time.monotonic(), kb_backlight.read_level):
             dispatcher.darken_backlight()

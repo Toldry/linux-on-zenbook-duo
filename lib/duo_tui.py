@@ -34,6 +34,7 @@ except ImportError:  # a python built without _curses: snapshots still work
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import duo_model as dm  # noqa: E402
+import battery  # noqa: E402
 
 Region = namedtuple("Region", "y x h w")
 
@@ -545,6 +546,10 @@ class Overview(View):
             row(f"backlight {dev}", "?" if pct is None else f"{pct}%", 0)
         row("keyboard backlight", f"level {gl.kb_level}", 0,
             "native LED" if gl.native_led else "HID fallback")
+        row("laptop battery", battery.laptop_text(gl.laptop_battery),
+            0 if gl.laptop_battery else t.dim)
+        row("keyboard battery", gl.kb_battery or "unknown",
+            t.dim if not gl.kb_battery or gl.kb_battery.startswith("unknown") else 0)
         if gl.battery_node:
             want = m.config.get("BATTERY_LIMIT", "")
             row("battery limit", f"{gl.battery_now}% now", 0,

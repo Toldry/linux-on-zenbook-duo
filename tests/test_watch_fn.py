@@ -370,3 +370,30 @@ class BacklightIdleOff(unittest.TestCase):
             d.wake_backlight()
         self.assertEqual(d.spawned, [[watch_fn.DUO, "kb-backlight", "--apply", "0"],
                                      [watch_fn.DUO, "kb-backlight", "--apply", "2"]])
+
+
+class KeyboardBattery(unittest.TestCase):
+    def test_a_low_reading_pops_up_once(self):
+        from unittest import mock
+        shown = []
+
+        def notify(pct, source):
+            shown.append((pct, source))
+            return True
+
+        b = watch_fn.battery
+        with mock.patch.object(b, "load_status", return_value=(bytes([0x5A, 0x3D, 0x09, 0x00]), 0)), \
+                mock.patch.object(b, "keyboard_sysfs", return_value=None), \
+                mock.patch.object(b, "keyboard_upower", return_value=None):
+            alarm = b.LowAlarm()
+            self.assertEqual(watch_fn.check_kb_battery(alarm, notify), 10)
+            self.assertIsNone(watch_fn.check_kb_battery(alarm, notify))
+        self.assertEqual(shown, [(9, "report")])
+
+    def test_no_popup_while_the_kernel_says_it_charges(self):
+        from unittest import mock
+        b = watch_fn.battery
+        with mock.patch.object(b, "load_status", return_value=None), \
+                mock.patch.object(b, "keyboard_sysfs", return_value=(4, "charging")), \
+                mock.patch.object(b, "keyboard_upower", return_value=None):
+            self.assertIsNone(watch_fn.check_kb_battery(b.LowAlarm(), lambda *_: True))

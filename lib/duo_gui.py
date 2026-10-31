@@ -25,6 +25,7 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import duo_model as dm  # noqa: E402  (same directory)
+import battery  # noqa: E402
 
 # One instance per session: a second `duo gui` hands its request to the first
 # over D-Bus and exits, which is what lets F12 close the window it opened. The
@@ -127,6 +128,8 @@ def glance_rows(g):
         ("top", "Top panel (eDP-1)", panels.get("eDP-1", "?")),
         ("bottom", "Bottom panel (eDP-2)", panels.get("eDP-2", "?")),
         ("backlight", "Backlight", lights),
+        ("laptop-battery", "Laptop battery", battery.laptop_text(g.laptop_battery)),
+        ("kb-battery", "Keyboard battery", g.kb_battery or "unknown"),
         ("battery", "Battery charge limit",
          f"{g.battery_now} %" if g.battery_now else "not supported by this kernel"),
     ]
