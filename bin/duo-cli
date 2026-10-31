@@ -192,7 +192,13 @@ backlight_pct() { # <device> -> "NN%" or "cur/max raw" when values are implausib
 }
 
 override_active() { # -> prints the overriding connectors, or nothing
-  local f="${XDG_RUNTIME_DIR:-/tmp/zenduo-$(id -u)}/zenduo/display-override.json"
+  local d="${XDG_RUNTIME_DIR:-}"
+  if [ -z "$d" ]; then
+    # Same rule as lib/dock.py: /tmp is shared, so only a directory we own.
+    d="${TMPDIR:-/tmp}/zenduo-$(id -u)"
+    if [ -L "$d" ] || [ ! -d "$d" ] || [ ! -O "$d" ]; then return 1; fi
+  fi
+  local f="$d/zenduo/display-override.json"
   [ -r "$f" ] || return 1
   python3 -c 'import json,sys
 try:

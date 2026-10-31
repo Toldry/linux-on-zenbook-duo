@@ -24,6 +24,7 @@ its own applies, and what a script should do when it is automating `duo`).
 import glob
 import json
 import os
+import stat
 import tempfile
 
 KBD_VID = "0b05"
@@ -79,23 +80,44 @@ def keyboard_usb_configured(dev=None):
         return False
 
 
-def _override_dir():
+def _override_dir(create=False):
+    run = os.environ.get("XDG_RUNTIME_DIR")
+    if run:
+        return os.path.join(run, "zenduo")
     # Fall back to a per-uid /tmp path for the TTY/live-USB case where the
-    # session's runtime directory is not exported.
-    base = os.environ.get("XDG_RUNTIME_DIR") or os.path.join(
-        tempfile.gettempdir(), f"zenduo-{os.getuid()}")
+    # session's runtime directory is not exported. /tmp is shared, and any
+    # account can make that name first, so it is used only when it is a real
+    # directory this user owns. The sticky bit on /tmp keeps it ours after.
+    base = os.path.join(tempfile.gettempdir(), f"zenduo-{os.getuid()}")
+    if create:
+        try:
+            os.mkdir(base, 0o700)
+        except FileExistsError:
+            pass
+        except OSError:
+            return None
+    try:
+        st = os.lstat(base)
+    except OSError:
+        return None
+    if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid():
+        return None
     return os.path.join(base, "zenduo")
 
 
-def override_path():
-    return os.path.join(_override_dir(), "display-override.json")
+def override_path(create=False):
+    """Where the marker lives, or None when there is no safe place for it."""
+    d = _override_dir(create)
+    return os.path.join(d, "display-override.json") if d else None
 
 
 def write_override(docked, want):
     """Record a deliberate layout choice made under dock state `docked`."""
     if os.environ.get("ZENDUO_MANAGED") == "1":
         return False
-    path = override_path()
+    path = override_path(create=True)
+    if path is None:
+        return False
     try:
         os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
         # Write-then-rename: the daemon reads this file from another process
@@ -111,8 +133,11 @@ def write_override(docked, want):
 
 def read_override():
     """The recorded choice, or None when there is none / it is unreadable."""
+    path = override_path()
+    if path is None:
+        return None
     try:
-        with open(override_path()) as f:
+        with open(path) as f:
             doc = json.load(f)
     except (OSError, ValueError):
         return None
@@ -123,8 +148,11 @@ def read_override():
 
 def clear_override():
     """Drop the marker. True if one was actually there."""
+    path = override_path()
+    if path is None:
+        return False
     try:
-        os.unlink(override_path())
+        os.unlink(path)
         return True
     except OSError:
         return False

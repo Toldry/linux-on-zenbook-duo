@@ -44,6 +44,49 @@ class Override(unittest.TestCase):
         self.assertIsNone(dock.read_override())
 
 
+class OverrideTmpFallback(unittest.TestCase):
+    """Without XDG_RUNTIME_DIR the marker goes under the shared /tmp, where
+    another account can create the per-uid name first."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.old_env = dict(os.environ)
+        self.old_tempdir = tempfile.tempdir
+        os.environ.pop("XDG_RUNTIME_DIR", None)
+        os.environ.pop("ZENDUO_MANAGED", None)
+        tempfile.tempdir = self.tmp.name
+        self.base = os.path.join(self.tmp.name, f"zenduo-{os.getuid()}")
+
+    def tearDown(self):
+        tempfile.tempdir = self.old_tempdir
+        os.environ.clear()
+        os.environ.update(self.old_env)
+        self.tmp.cleanup()
+
+    def test_creates_a_private_directory(self):
+        self.assertTrue(dock.write_override(True, ["eDP-1"]))
+        self.assertEqual(os.stat(self.base).st_mode & 0o777, 0o700)
+        self.assertEqual(dock.read_override(), {"docked": True, "want": ["eDP-1"]})
+
+    def test_reading_creates_nothing(self):
+        self.assertIsNone(dock.read_override())
+        self.assertFalse(os.path.exists(self.base))
+
+    def test_a_symlink_in_its_place_is_not_followed(self):
+        elsewhere = os.path.join(self.tmp.name, "elsewhere")
+        os.mkdir(elsewhere)
+        os.symlink(elsewhere, self.base)
+        self.assertIsNone(dock.override_path())
+        self.assertFalse(dock.write_override(True, ["eDP-1"]))
+        self.assertEqual(os.listdir(elsewhere), [])
+
+    def test_a_file_in_its_place_is_refused(self):
+        open(self.base, "w").close()
+        self.assertFalse(dock.write_override(True, ["eDP-1"]))
+        self.assertIsNone(dock.read_override())
+        self.assertFalse(dock.clear_override())
+
+
 class UsbLink(unittest.TestCase):
     """keyboard_docked is the physical fact; keyboard_usb_configured says whether
     the link works. 2026-09-05: the keyboard sat enumerated-but-unconfigured
