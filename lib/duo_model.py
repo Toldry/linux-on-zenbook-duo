@@ -35,6 +35,10 @@ CLI = os.path.join(ROOT, "bin", "duo-cli")
 DISPLAYCTL = os.path.join(HERE, "displayctl.py")
 PYGI = os.environ.get("DUO_PYGI", "/usr/bin/python3")
 AMP_CHECK = "/usr/local/sbin/duo-cs35l41-check"
+# MyASUS's Battery Care Mode is an on/off switch that stops charging at 80 %
+# (the author's description of MyASUS, 2026-10-31); the GUI offers that or 100.
+BATTERY_CARE_PCT = 80
+SEPARATE_FAN_DROPIN = "/etc/systemd/system/power-profiles-daemon.service.d/50-zenduo-separate-fan.conf"
 
 sys.path.insert(0, HERE)
 import audio_probe  # noqa: E402  (same directory)
@@ -78,6 +82,7 @@ FEATURES = [
     Feature("psr-fix", "i915.enable_psr=0 on the kernel command line (OLED flicker)", scope="system", flag="psr-fix"),
     Feature("palm-rejection", "libinput quirk so disable-while-typing covers the detachable touchpad", scope="system", flag="palm-rejection"),
     Feature("amp-check", "notify when the CS35L41 speaker amps fail to power up", scope="system", flag="amp-check"),
+    Feature("separate-fan", "fan mode (Fn+F) and GNOME's Power Mode are separate settings, as on Windows", scope="system", flag="separate-fan"),
 ]
 
 # ── the knobs, as the screen edits them ──────────────────────────────────────
@@ -943,6 +948,20 @@ class Model:
     def bat_limit(self, pct=None):
         r = cli("bat-limit", *([str(pct)] if pct is not None else []))
         self.refresh_fast()
+        return r
+
+    def battery_care(self, on):
+        """MyASUS's Battery Care Mode: a switch between BATTERY_CARE_PCT and 100.
+        Saved to the config, applied now, and kept across reboots, which reset
+        the kernel's threshold, by the bat-limit feature."""
+        pct = BATTERY_CARE_PCT if on else 100
+        r = self.config_set("BATTERY_LIMIT", str(pct))
+        if not r.ok:
+            return r
+        r = self.bat_limit(pct)
+        unit = self.unit("bat-limit")
+        if r.ok and unit is not None and unit.load == "loaded" and not unit.enabled:
+            self.enable("bat-limit")
         return r
 
     def speaker_dsp(self, verb):

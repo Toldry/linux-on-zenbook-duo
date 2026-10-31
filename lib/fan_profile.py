@@ -7,10 +7,11 @@ Standard 0, Whisper 1, Performance 2, stepped in that order on Fn+F
 puts that same setting behind /sys/firmware/acpi/platform_profile, so this
 writes only that file, through the root helper. It does not go through
 power-profiles-daemon: a profile there also moves the CPU's
-energy_performance_preference, which MyASUS's fan modes leave alone. If
-power-profiles-daemon notices the change and follows it with the CPU too is
-**VERIFY-ON-HW** (`duo fan-profile`, then read
-/sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference).
+energy_performance_preference, which MyASUS's fan modes leave alone. Left
+alone, power-profiles-daemon notices the change and follows it, moving
+GNOME's Power Mode with it (seen 2026-10-31 on Ubuntu 26.04.1, daemon 0.30);
+system/57-power-profiles.sh starts it with --block-driver=platform_profile
+so the two stay separate settings, as on Windows.
 
 Which platform_profile name asus-wmi maps to which BIOS number on a Vivo id
 (quiet = Whisper is its table's meaning) is **VERIFY-ON-HW** as well.

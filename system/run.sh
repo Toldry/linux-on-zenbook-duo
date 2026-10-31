@@ -12,7 +12,8 @@
 #
 # Order: 00 preflight (read-only) → 10 packages → 20 kernel → 30 GRUB →
 #        40 the duo CLI → 45 udev → 46 speaker-amp check → 50 root helper +
-#        sudoers → 55 touchpad quirk.
+#        sudoers → 55 touchpad quirk → 57 fan mode kept out of
+#        GNOME's Power Mode.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 source ./lib.sh
@@ -21,7 +22,7 @@ usage_text() {
   cat <<'USAGE'
 usage: run.sh [--dry-run] [--force] [--dev] [--prefix DIR] [--user NAME]
               [--hwe-kernel|--no-hwe-kernel] [--no-psr-fix] [--no-palm-rejection]
-              [--no-amp-check]
+              [--no-amp-check] [--no-separate-fan]
 USAGE
 }
 
@@ -40,6 +41,8 @@ while [ $# -gt 0 ]; do
     --no-palm-rejection) ZENDUO_PALM_REJECTION=0 ;;
     --amp-check)         ZENDUO_AMP_CHECK=1 ;;
     --no-amp-check)      ZENDUO_AMP_CHECK=0 ;;
+    --separate-fan)      ZENDUO_SEPARATE_FAN=1 ;;
+    --no-separate-fan)   ZENDUO_SEPARATE_FAN=0 ;;
     -h|--help)           usage_text; exit 0 ;;
     *) die "unknown argument: $1 ($(usage_text))" ;;
   esac
@@ -51,11 +54,12 @@ export ZENDUO_FORCE="${ZENDUO_FORCE:-0}" ZENDUO_DEV="${ZENDUO_DEV:-0}"
 export ZENDUO_TARGET_USER="${ZENDUO_TARGET_USER:-}"
 export ZENDUO_HWE_KERNEL="${ZENDUO_HWE_KERNEL:-}" ZENDUO_PSR_FIX="${ZENDUO_PSR_FIX:-}"
 export ZENDUO_PALM_REJECTION="${ZENDUO_PALM_REJECTION:-}" ZENDUO_AMP_CHECK="${ZENDUO_AMP_CHECK:-}"
+export ZENDUO_SEPARATE_FAN="${ZENDUO_SEPARATE_FAN:-}"
 
 require_root
 log "zenduo $(cat "$ZENDUO_SRC/VERSION" 2>/dev/null || echo dev) — system layer   dry run: $DRY_RUN   prefix: $ZENDUO_PREFIX"
 
-for script in 00-preflight.sh 10-packages.sh 20-kernel.sh 30-grub.sh 40-cli.sh 45-udev.sh 46-speaker-amp.sh 50-sudoers.sh 55-touchpad.sh; do
+for script in 00-preflight.sh 10-packages.sh 20-kernel.sh 30-grub.sh 40-cli.sh 45-udev.sh 46-speaker-amp.sh 50-sudoers.sh 55-touchpad.sh 57-power-profiles.sh; do
   log "── $script"
   bash "./$script"
 done

@@ -134,9 +134,14 @@ system_half() {
   if [ -e /etc/libinput/local-overrides.quirks ] && grep -qE '^# (zenduo|dome) — palm rejection for the ASUS Zenbook Duo' /etc/libinput/local-overrides.quirks; then
     rm -f /etc/libinput/local-overrides.quirks
   fi
+  if [ -e /etc/systemd/system/power-profiles-daemon.service.d/50-zenduo-separate-fan.conf ]; then
+    rm -f /etc/systemd/system/power-profiles-daemon.service.d/50-zenduo-separate-fan.conf
+    systemctl daemon-reload || true
+    systemctl try-restart power-profiles-daemon.service || true
+  fi
   rm -f "$PREFIX/bin/duo" "$PREFIX/bin/duo-cli"
   rm -rf "$PREFIX/lib/zenduo"
-  log "removed the commands, helper, sudoers rule, udev rule, touchpad quirk and amp reporter"
+  log "removed the commands, helper, sudoers rule, udev rule, touchpad quirk, amp reporter and fan mode separation"
   if [ "$REVERT_GRUB" = 1 ] && [ -f "$GRUB_FILE" ]; then
     remove_grub_param "i915.enable_psr=0"
     [ "$GRUB_CHANGED" = 1 ] && grub_regenerate

@@ -8,7 +8,8 @@
 # Two halves, both run by default:
 #   --system   root: packages, kernel policy (Ubuntu), GRUB PSR fix, the `duo`
 #              and `duo-cli` commands, udev rules, the root helper + sudoers rule, the
-#              touchpad quirk, the speaker-amp reporter.   (system/run.sh)
+#              touchpad quirk, the speaker-amp reporter, the fan mode kept
+#              apart from GNOME's Power Mode.   (system/run.sh)
 #   --user     you: ~/.config/zenduo/zenduo.conf, the duo-* systemd user units,
 #              and the features you asked for, started now.
 #
@@ -17,6 +18,7 @@
 #   --no-psr-fix           don't add i915.enable_psr=0 (OLED flicker fix)
 #   --no-palm-rejection    don't install the libinput touchpad quirk
 #   --no-amp-check         don't install the CS35L41 speaker-amp reporter
+#   --no-separate-fan      let GNOME's Power Mode change the fan mode (and vice versa)
 #   --no-watch-displays    don't run the dock policy daemon
 #   --no-watch-fn          don't run the keyboard hotkey daemon
 #   --watch-backlight      also run the bottom-panel backlight sync daemon
@@ -62,7 +64,7 @@ while [ $# -gt 0 ]; do
     --dry-run|-n)        DRY_RUN=1; SYSTEM_FLAGS+=(--dry-run); USER_FLAGS+=(--dry-run) ;;
     --force)             FORCE=1; SYSTEM_FLAGS+=(--force) ;;
     --prefix)            [ $# -ge 2 ] || die "--prefix needs a directory"; PREFIX="$2"; SYSTEM_FLAGS+=(--prefix "$2"); USER_FLAGS+=(--prefix "$2"); shift ;;
-    --hwe-kernel|--no-hwe-kernel|--psr-fix|--no-psr-fix|--palm-rejection|--no-palm-rejection|--amp-check|--no-amp-check)
+    --hwe-kernel|--no-hwe-kernel|--psr-fix|--no-psr-fix|--palm-rejection|--no-palm-rejection|--amp-check|--no-amp-check|--separate-fan|--no-separate-fan)
                          SYSTEM_FLAGS+=("$1") ;;
     --watch-displays)    WATCH_DISPLAYS=1; USER_FLAGS+=("$1") ;;
     --no-watch-displays) WATCH_DISPLAYS=0; USER_FLAGS+=("$1") ;;
