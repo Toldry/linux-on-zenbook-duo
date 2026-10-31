@@ -26,6 +26,12 @@ class Recorder(watch_fn.Dispatcher):
     def virtual_keys(self):
         return None  # never create a real /dev/uinput device from a test
 
+    def output(self, argv):
+        self.ran.append(argv)
+        return self.outputs.get(argv[0])
+
+    outputs = {}
+
 
 class FnRow(unittest.TestCase):
     def test_mainline_codes_for_mic_mute_and_emoji(self):
@@ -34,10 +40,39 @@ class FnRow(unittest.TestCase):
         self.assertEqual(watch_fn.DEFAULT_ACTIONS[0x7E], "emoji")
         self.assertTrue({"mic-mute", "emoji"} <= watch_fn.KNOWN_ACTIONS)
 
-    def test_mic_mute_toggles_the_default_source(self):
+    def test_mic_mute_toggles_the_default_source_and_sets_the_led(self):
         d = Recorder()
+        d.outputs = {"wpctl": "Volume: 1.00 [MUTED]\n"}
         d.dispatch(0x7C, "mic-mute")
-        self.assertEqual(d.spawned, [["wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "toggle"]])
+        self.assertEqual(d.ran[0], ["wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "toggle"])
+        self.assertEqual(d.spawned, [[watch_fn.DUO, "mic-led", "on"]])
+        d = Recorder()
+        d.outputs = {"wpctl": "Volume: 1.00\n"}
+        d.dispatch(0x7C, "mic-mute")
+        self.assertEqual(d.spawned, [[watch_fn.DUO, "mic-led", "off"]])
+
+    def test_fn_lock_toggles_the_host_state(self):
+        # Windows, 2026-10-31: MyASUS answers 5a 4e with 5a d0 4e <state>.
+        d = Recorder()
+        d.dispatch(0x4E, "fn-lock")
+        self.assertEqual(d.spawned, [[watch_fn.DUO, "fn-lock", "toggle"]])
+
+    def test_fn_f_steps_the_power_profile_in_myasus_order(self):
+        self.assertEqual(watch_fn.DEFAULT_ACTIONS[0x9D], "fan-profile")
+        self.assertEqual([watch_fn.next_profile(p) for p in
+                          ("balanced", "power-saver", "performance", "", "odd")],
+                         ["power-saver", "performance", "balanced", "balanced", "balanced"])
+        d = Recorder()
+        d.outputs = {"powerprofilesctl": "balanced\n"}
+        d.dispatch(0x9D, "fan-profile")
+        self.assertEqual(d.spawned, [["powerprofilesctl", "set", "power-saver"]])
+
+    def test_reconnect_restores_fn_lock_and_the_mic_led(self):
+        d = Recorder()
+        d.outputs = {"wpctl": "Volume: 0.40 [MUTED]\n"}
+        d.restore_state()
+        self.assertEqual(d.spawned, [[watch_fn.DUO, "fn-lock", "--restore"],
+                                     [watch_fn.DUO, "mic-led", "on"]])
 
     def test_emoji_raises_the_ibus_picker(self):
         d = Recorder()

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Fn-lock, the mic-mute light and Fn+F, as MyASUS does them
+
+- Fn+Esc now swaps the F-row: `watch-fn` sends the same report MyASUS sends
+  (`duo fn-lock`), remembers the choice and re-sends it after dock, undock
+  and resume
+- F9's light follows the microphone's mute state (`duo mic-led`)
+- Fn+F steps the power profile, in MyASUS's order: balanced, power-saver,
+  performance
+- all three copy what a Windows capture showed (docs/HARDWARE.md, "What
+  MyASUS does") and have not been run on Linux yet
+
 ### A kit for watching the ASUS software on Windows
 
 - `windows/` holds Python scripts to run on the Windows partition: they log

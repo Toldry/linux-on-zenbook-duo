@@ -111,6 +111,9 @@ usage: duo-cli <command>        (duo <command> runs the same thing)
                          the level is remembered and restored on dock/undock/resume
   kb-backlight --show    print the remembered level
   kb-backlight --apply <0-3>  set it without remembering (watch-fn's idle-off)
+  fn-lock [on|off|toggle]  swap the F-row (what Fn+Esc runs); remembered and
+                         re-sent on dock/undock/resume
+  mic-led on|off         the mic-mute LED on F9 (watch-fn keeps it in step)
   bat-limit [20-100]     battery charge-limit threshold (no value = BATTERY_LIMIT
                          from the config file)
   speaker-dsp <install|status|uninstall|seed|preset>
@@ -1056,6 +1059,8 @@ case "$cmd" in
   kb-init)            cmd_kb_init "$@" ;;
   watch-fn)           cmd_watch_fn "$@" ;;
   kb-backlight)       cmd_kb_backlight "$@" ;;
+  fn-lock)            exec python3 "$LIB/kb_state.py" fn-lock "$@" ;;
+  mic-led)            exec python3 "$LIB/kb_state.py" mic-led "$@" ;;
   bat-limit)          cmd_bat_limit "$@" ;;
   speaker-dsp)        cmd_speaker_dsp "$@" ;;
   audio)              cmd_audio "$@" ;;

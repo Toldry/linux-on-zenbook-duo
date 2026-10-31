@@ -17,7 +17,10 @@ This daemon closes the loop:
       brightness     -> GNOME's own StepUp/StepDown D-Bus (OSD included)
       second-screen  -> `duo toggle` (bottom panel on/off)
       kbd-backlight  -> `duo kb-backlight` cycle 0..3
-      mic-mute       -> `wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle`
+      mic-mute       -> `wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle`, then the
+                        key's LED set to match (`duo mic-led`)
+      fn-lock        -> `duo fn-lock toggle`: the F-row swap is host state
+      fan-profile    -> power-profiles-daemon, in MyASUS's Fn+F order (Fn+F)
       emoji          -> `ibus emoji` (the picker GNOME's Ctrl+; opens)
       split-screen   -> `duo theme toggle`, dark mode (bare F8)
       myasus         -> `duo gui --toggle`, the duo window (bare F12)
@@ -73,18 +76,35 @@ DEFAULT_ACTIONS = {
     # asus_input_mapping, read 2026-10-30). VERIFY-ON-HW that this keyboard
     # sends it: `duo fn-probe`, or `duo log` names any code with no action.
     0x86: "myasus",
+    # Measured under Windows 2026-10-31 (docs/HARDWARE.md, "What MyASUS
+    # does"): Fn+F sends 5a 9d and MyASUS steps the fan profile on it.
+    0x9D: "fan-profile",
 }
 
+# MyASUS's Fn+F order (Windows capture, 2026-10-31): Standard, Whisper,
+# Performance, back to Standard. The names are power-profiles-daemon's, which
+# GNOME's power menu shows; it drives platform_profile underneath. Which
+# platform_profile value lands on which BIOS mode is asus-wmi's table:
+# VERIFY-ON-HW (HARDWARE.md says how).
+PROFILE_CYCLE = ["balanced", "power-saver", "performance"]
+
 # Actions from a fn-map.json we know how to perform (everything else logged).
-# The actions dispatch() acts on (fn-lock only on purpose: see the docstring).
+# The actions dispatch() acts on.
 HANDLED = {"brightness-down", "brightness-up", "kbd-backlight", "second-screen",
-           "mic-mute", "emoji", "fn-lock", "split-screen", "myasus"}
+           "mic-mute", "emoji", "fn-lock", "split-screen", "myasus", "fan-profile"}
 
 
 KNOWN_ACTIONS = {"brightness-down", "brightness-up", "fn-lock", "second-screen",
                  "kbd-backlight", "mute", "volume-down", "volume-up",
                  "mic-mute", "display-switch", "split-screen", "camera-toggle",
-                 "emoji", "myasus"}
+                 "emoji", "myasus", "fan-profile"}
+
+
+def next_profile(current):
+    """The profile Fn+F moves to from `current` (balanced when unknown)."""
+    if current not in PROFILE_CYCLE:
+        return PROFILE_CYCLE[0]
+    return PROFILE_CYCLE[(PROFILE_CYCLE.index(current) + 1) % len(PROFILE_CYCLE)]
 
 
 def log(msg):
@@ -154,6 +174,21 @@ class Dispatcher:
             log(f"restoring keyboard backlight to level {level}")
         self.spawn([DUO, "kb-backlight", str(level)])
 
+    def restore_state(self):
+        """Re-send what the keyboard forgot on re-enumeration besides the light.
+
+        Fn-lock is re-sent only when it is on (kb_state --restore), and the
+        mic-mute LED is set from PipeWire's state, which outlives the keyboard.
+        """
+        self.spawn([DUO, "fn-lock", "--restore"])
+        if self.mic_muted():
+            self.spawn([DUO, "mic-led", "on"])
+
+    def mic_muted(self):
+        """True when the default source is muted; False when unknown."""
+        out = self.output(["wpctl", "get-volume", "@DEFAULT_AUDIO_SOURCE@"])
+        return out is not None and "[MUTED]" in out
+
     def darken_backlight(self):
         # --apply: dark for now, but the remembered level stays the user's.
         self.spawn([DUO, "kb-backlight", "--apply", "0"])
@@ -196,6 +231,15 @@ class Dispatcher:
         except (OSError, subprocess.TimeoutExpired) as e:
             log(f"failed to run {argv[0]}: {e}")
             return False
+
+    def output(self, argv):
+        """argv's stdout, or None when it failed or could not run."""
+        try:
+            done = subprocess.run(argv, capture_output=True, text=True, timeout=5)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            log(f"failed to run {argv[0]}: {e}")
+            return None
+        return done.stdout if done.returncode == 0 else None
 
     def gsd_screen(self, method):
         # GNOME settings-daemon's own brightness path: applies the change AND
@@ -266,8 +310,12 @@ class Dispatcher:
         elif action == "mic-mute":
             # PipeWire's own toggle on the default source. No OSD: GNOME draws
             # one only for key events, and these reports never become key
-            # events (mainline has no entry for this keyboard, V8).
-            self.spawn(["wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "toggle"])
+            # events (mainline has no entry for this keyboard, V8). Then the
+            # key's LED, from the state PipeWire reports rather than a flip
+            # of our own, so a mute set elsewhere is corrected on the next
+            # press. MyASUS does the same with 5a d0 7c (HARDWARE.md).
+            self.run(["wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "toggle"])
+            self.spawn([DUO, "mic-led", "on" if self.mic_muted() else "off"])
         elif action == "emoji":
             # IBus ships the picker GNOME's Ctrl+; opens; `ibus emoji` raises
             # it. The unit sees WAYLAND_DISPLAY through the session's imported
@@ -286,7 +334,14 @@ class Dispatcher:
             self.spawn(["systemd-run", "--user", "--collect", "--quiet",
                         "--", DUO, "gui", "--toggle"])
         elif action == "fn-lock":
-            pass  # see the module docstring: the swap is not ours to perform yet
+            # The keyboard only reports the key; the host keeps the state and
+            # sends it (5a d0 4e, as MyASUS does: HARDWARE.md).
+            self.spawn([DUO, "fn-lock", "toggle"])
+        elif action == "fan-profile":
+            current = (self.output(["powerprofilesctl", "get"]) or "").strip()
+            target = next_profile(current)
+            log(f"power profile {current or '?'} -> {target}")
+            self.spawn(["powerprofilesctl", "set", target])
 
 
 def idle_off_seconds():
@@ -493,6 +548,7 @@ def main():
                     # backlight back rather than leaving it dark until the
                     # user presses the key.
                     dispatcher.restore_backlight()
+                    dispatcher.restore_state()
                     idle.connected(time.monotonic(),
                                    any(kb_init.over_bluetooth(n) for n in nodes))
                 else:
