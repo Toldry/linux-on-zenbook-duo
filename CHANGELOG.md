@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### An Extras tab for what Windows does not do
+
+- `duo gui` moves F7 opens a terminal, F8 switches dark mode and the dark
+  style switch to their own tab, Extras, so the Settings page only holds
+  what copies the laptop's Windows behaviour
+- the window is a little wider so seven tabs keep their names
+
 ### Fn-lock, the mic-mute light and Fn+F, as MyASUS does them
 
 - Fn+Esc now swaps the F-row: `watch-fn` sends the same report MyASUS sends

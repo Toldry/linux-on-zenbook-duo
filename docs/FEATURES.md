@@ -69,4 +69,4 @@ What the machine does under Windows, whether it does it here, and how.
 | NPU | — | ✖ |
 | BIOS updates | MyASUS or EZ-Flash from USB; never from Linux | ✖ by design |
 | A settings app | `duo`: the screen, with every feature, knob, check and log (`duo-cli features` / `duo-cli config` underneath) | 🧪 2026-09-17 |
-| A settings window | `duo gui` (F12, or Zenbook Duo in the app grid): GTK 4 + libadwaita over the same model as the screen | 🧪 2026-10-30, run under a virtual display, not yet on hardware |
+| A settings window | `duo gui` (F12, or Zenbook Duo in the app grid): GTK 4 + libadwaita over the same model as the screen; what Windows does not do (F7 terminal, F8 dark mode) sits on its own Extras tab | 🧪 2026-10-30, run under a virtual display, not yet on hardware |
