@@ -140,7 +140,9 @@ login-PIN extension, Brave/Flatpak/Docker, the app grid, the dash.
 - [x] github.com/JowiAoun/linux-on-zenbook-duo, public
 - [ ] CI green (the first runs failed on shellcheck, then on the SIGPIPE
       demonstration under a runner that ignores SIGPIPE — both fixed 2026-09-05)
-- [ ] tag `v0.9.0` once K is complete
+- [ ] tag `v0.9.0` once K is complete — superseded (2026-10-31): CI now
+      releases every merge that brings a `changelog.d/` fragment, starting
+      at 0.10.0, and tags it (changelog.d/README.md)
 
 ---
 

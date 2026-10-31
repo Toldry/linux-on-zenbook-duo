@@ -49,6 +49,28 @@ HELPER=/usr/local/sbin/zenduo-helper
 
 USER_FEATURES="watch-displays watch-fn watch-backlight watch-rotation bat-limit"
 
+# The release in VERSION, plus how far a git checkout (./install.sh --dev) is
+# past it: 0.10.0+3.g1a2b3c4 is three commits on, .dirty has uncommitted
+# edits. A bug report then names the exact code. The previous release is the
+# last commit that changed VERSION (tools/release.py uses the same rule), so
+# no tags are needed. Any git failure (no git, "dubious ownership" under sudo)
+# falls back to the plain release.
+duo_version() {
+  local version base ahead sha dirty=""
+  version="$(cat "$DUO_ROOT/VERSION" 2>/dev/null || echo dev)"
+  if [ -e "$DUO_ROOT/.git" ] && command -v git >/dev/null 2>&1 \
+     && base="$(git -C "$DUO_ROOT" log -1 --format=%H -- VERSION 2>/dev/null)" \
+     && [ -n "$base" ] \
+     && ahead="$(git -C "$DUO_ROOT" rev-list --count "$base..HEAD" 2>/dev/null)" \
+     && sha="$(git -C "$DUO_ROOT" rev-parse --short HEAD 2>/dev/null)"; then
+    git -C "$DUO_ROOT" diff --quiet HEAD -- 2>/dev/null || dirty=".dirty"
+    if [ "$ahead" != 0 ] || [ -n "$dirty" ]; then
+      version="$version+$ahead.g$sha$dirty"
+    fi
+  fi
+  printf '%s\n' "$version"
+}
+
 # Under a systemd unit stdout already IS the journal (the units set
 # SyslogIdentifier=zenduo), so a logger copy would appear twice. JOURNAL_STREAM
 # is "device:inode" of that stream (systemd.exec(5)); compare it with our own
@@ -272,7 +294,7 @@ ck() { # <PASS|WARN|FAIL|INFO> <must?0/1> <message>
 }
 
 cmd_doctor() {
-  echo "== zenduo doctor $(cat "$DUO_ROOT/VERSION" 2>/dev/null || echo dev) — $(date -u +%FT%TZ) =="
+  echo "== zenduo doctor $(duo_version) — $(date -u +%FT%TZ) =="
   echo
   echo "-- system --"
   ck INFO 0 "kernel: $(uname -r)"
@@ -1077,7 +1099,7 @@ case "$cmd" in
   # -t duo: units installed before the templates set SyslogIdentifier log the
   # daemons' stdout under the executable's name.
   log)                journalctl --user -t "$TAG" -t duo -n 50 -f ;;
-  version|--version)  cat "$DUO_ROOT/VERSION" 2>/dev/null || echo dev ;;
+  version|--version)  duo_version ;;
   help|-h|--help)     usage_text ;;
   *)                  usage ;;
 esac

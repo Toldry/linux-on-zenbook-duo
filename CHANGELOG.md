@@ -1,5 +1,9 @@
 # Changelog
 
+Every release of linux-on-zenbook-duo, newest first. CI writes this file from
+[`changelog.d/`](changelog.d/README.md) after each merge; do not edit it by
+hand. `duo version` prints the release you have.
+
 ## Unreleased
 
 ### An Extras tab for what Windows does not do
