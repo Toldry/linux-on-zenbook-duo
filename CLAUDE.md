@@ -60,6 +60,8 @@ system/*.sh        root half. Each: source lib.sh; require_root; feature_on NAME
 systemd/user/      unit templates install.sh copies; nix/home-manager.nix generates its own.
 nix/               flake + package + module. `nix flake check` builds and evaluates everything.
 tests/             make test. Add a test with every fix in a testable layer.
+windows/           a capture kit run on Windows (docs/WINDOWS-RE.md); stdlib, plus Frida and
+                   numpy/sounddevice for two tools. Decoders tested in tests/test_windows_re.py.
 docs/              PLAN (A–Z) · HARDWARE (facts + how established) · FEATURES (parity) · DESIGN · install/
 ```
 

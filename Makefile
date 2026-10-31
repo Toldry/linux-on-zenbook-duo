@@ -55,7 +55,7 @@ lint:
 	@if command -v shellcheck >/dev/null 2>&1; then \
 	  shellcheck -x bin/duo-cli helper/zenduo-helper install.sh uninstall.sh lib/conf.sh system/*.sh tests/*.sh; \
 	else echo "shellcheck not installed — skipped (CI runs it)"; fi
-	$(PYTHON) -m py_compile bin/duo lib/*.py tests/*.py
+	$(PYTHON) -m py_compile bin/duo lib/*.py tests/*.py windows/*.py
 	@# The trap that shipped three times: a pipe into grep -q under pipefail.
 	@if grep -nE '\|[[:space:]]*grep[[:space:]]+-[a-zA-Z]*q' bin/duo-cli install.sh uninstall.sh lib/conf.sh system/*.sh | grep -v '^[^:]*:[0-9]*:[[:space:]]*#'; then \
 	  echo "^ never pipe into grep -q (see docs/DESIGN.md) — capture, then match" >&2; exit 1; fi

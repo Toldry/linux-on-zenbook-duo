@@ -427,7 +427,8 @@ config/                  annotated zenduo.conf example, the window's .desktop la
 presets/easyeffects/     the speaker preset, generated from lib/speaker_dsp.py
 nix/                     flake package + home-manager module
 tests/                   bash + python unit tests (make test)
-docs/                    PLAN (A–Z), HARDWARE, FEATURES, DESIGN, install guide, research
+windows/                 run on Windows: capture what the ASUS software does (docs/WINDOWS-RE.md)
+docs/                    PLAN (A–Z), HARDWARE, FEATURES, DESIGN, WINDOWS-RE, install guide, research
 ```
 
 Design rules — fail-safe, native-first, poll-don't-storm, prove-don't-assume —

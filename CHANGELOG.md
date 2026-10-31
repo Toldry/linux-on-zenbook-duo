@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+### A kit for watching the ASUS software on Windows
+
+- `windows/` holds Python scripts to run on the Windows partition: they log
+  the BIOS calls and keyboard reports MyASUS makes, the USB traffic, the WMI
+  calls and the speaker response, cut by what you did, and `analyze.py` turns
+  that into Linux equivalents. Read only, apart from one guarded test command.
+  docs/WINDOWS-RE.md is the guide and lists what is still guesswork. Not yet
+  run on Windows
+- `py capture.py --scenario keyboard-docked` runs all of it in one window and
+  walks the steps in colour, one key press or click each, with the event
+  stream in `events.log` instead of on screen. The keyboard is captured in
+  two runs, docked and on Bluetooth, and each step waits until Windows sees
+  the keyboard in the right place
+- `capture.py` also reads the BIOS settings after every step and prints the
+  one the step changed, old and new value, so the fan-profile and battery
+  recipe needs no separate before/after commands. `atk_query.py --save NAME`
+  and `--compare NAME` cover the one setting that needs a restart
+- in any step, `r` goes back and redoes the step before; `--steps 4-6` (with
+  `--list-steps` to see the numbers) runs only some steps again
+
 ### The keyboard light goes dark when you stop typing on Bluetooth
 
 - detached, the keyboard's light stayed on until you turned it off, and the
