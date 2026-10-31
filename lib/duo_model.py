@@ -40,7 +40,9 @@ sys.path.insert(0, HERE)
 import audio_probe  # noqa: E402  (same directory)
 import battery  # noqa: E402
 import dock  # noqa: E402
+import fan_profile  # noqa: E402
 import kb_backlight  # noqa: E402
+import kb_state  # noqa: E402
 import monitors_xml  # noqa: E402
 import speaker_dsp  # noqa: E402
 
@@ -470,6 +472,8 @@ class Glance:
     realtime: list = field(default_factory=list)     # audio_probe.data_loops()
     session: str = ""
     dsp_installed: bool = False                      # the EasyEffects db is seeded
+    fan_mode: str = ""                               # platform_profile: quiet | balanced | performance
+    fn_lock: bool = False                            # kb_state's remembered Fn-lock
 
     @property
     def keyboard_text(self):
@@ -498,6 +502,8 @@ def read_glance():
     g.backlights = backlights()
     g.native_led = os.path.isdir("/sys/class/leds/asus::kbd_backlight")
     g.kb_level = kb_backlight.read_level()
+    g.fan_mode = fan_profile.read(fan_profile.PROFILE)
+    g.fn_lock = kb_state.read_fn_lock()
     node = _glob_first("/sys/class/power_supply/BAT*/charge_control_end_threshold")
     g.battery_node = node
     g.battery_now = _read(node) if node else ""
@@ -920,6 +926,17 @@ class Model:
 
     def kb_backlight(self, level):
         r = cli("kb-backlight", str(level))
+        self.refresh_fast()
+        return r
+
+    def fan_profile(self, mode):
+        """`duo-cli fan-profile standard|whisper|performance`, MyASUS's names."""
+        r = cli("fan-profile", mode)
+        self.refresh_fast()
+        return r
+
+    def fn_lock(self, on):
+        r = cli("fn-lock", "on" if on else "off")
         self.refresh_fast()
         return r
 

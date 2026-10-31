@@ -98,22 +98,90 @@ class Knobs(unittest.TestCase):
         method = dm.KNOB_BY_KEY["APPLY_METHOD"]
         self.assertEqual(dg.knob_choices(method, ["a"]), ["temporary", "persistent"])
 
-    def test_every_knob_has_words_and_lands_in_a_group(self):
+    def test_every_knob_has_words_and_one_place(self):
         groups = {title for title, _desc in dg.KNOB_GROUPS} | {dg.EXTRAS[0]}
         for k in dm.KNOBS:
             self.assertIn(k.key, dg.KNOB_TEXT, k.key)
-            self.assertIn(dg.knob_section(k), groups, k.key)
+            if dg.knob_page(k) == "device":
+                # A card carries it; exactly one, or the row would be built twice.
+                self.assertEqual(sum(c.how == f"knob:{k.key}" for c in dg.CARDS), 1, k.key)
+            else:
+                self.assertIn(dg.knob_section(k), groups, k.key)
 
     def test_what_windows_does_not_do_is_on_its_own_tab(self):
         k = dm.KNOB_BY_KEY
         self.assertEqual({key for key in k if dg.knob_page(k[key]) == "extras"},
                          {"F7_TERMINAL", "F8_DARK_MODE"})
-        self.assertEqual(dg.knob_section(k["F12_GUI"]), "Keyboard shortcuts")
-        self.assertIn("extras", dg.PAGES)
+        self.assertEqual(dg.knob_page(k["F12_GUI"]), "device")
+        self.assertEqual(dg.page_target("extras"), ("settings", "extras"))
 
     def test_a_knob_without_words_still_shows(self):
         knob = dm.Knob("NEW_KNOB", "bool", "something new")
-        self.assertEqual(dg.knob_text(knob), (dg.KNOB_GROUPS[-1][0], "NEW_KNOB", "something new"))
+        self.assertEqual(dg.knob_text(knob), (dg.KNOB_GROUPS[0][0], "NEW_KNOB", "something new"))
+        self.assertEqual(dg.knob_page(knob), "screens")
+
+
+class MyAsusLayout(unittest.TestCase):
+    """The window is laid out like MyASUS (owner's screenshots, 2026-10-30)."""
+
+    def test_sidebar_keeps_myasus_order_and_greys_what_linux_lacks(self):
+        names = [e[0] for e in dg.SIDEBAR if e]
+        self.assertEqual(names[:2], ["home", "device"])
+        self.assertEqual(names[-1], "settings")
+        for entry in dg.SIDEBAR:
+            if entry and entry[0] not in dg.PAGES:
+                self.assertTrue(entry[3], f"{entry[0]} is greyed without a reason")
+
+    def test_device_settings_has_myasus_tabs_and_cards(self):
+        self.assertEqual([title for _t, title in dg.TABS["device"]],
+                         ["Power & Performance", "Audio & Visual", "Input Device Settings"])
+        for tab, _title in dg.TABS["device"]:
+            self.assertTrue(dg.cards(tab), tab)
+        titles = {c.title for c in dg.CARDS}
+        for seen in ("Fan Profile", "Battery Care Mode", "Memory Allocated to GPU",
+                     "Sleep Assistant", "Function key", "Smart Switch",
+                     "Keyboard backlight sleep mode", "Automatic keyboard backlight"):
+            self.assertIn(seen, titles)
+
+    def test_what_is_not_done_is_shown_greyed_with_a_reason(self):
+        for card in dg.CARDS:
+            self.assertEqual(card.available, not card.why, card.title)
+            self.assertTrue(card.desc, card.title)
+        self.assertTrue(dg.QUICK_SETTING[2] and dg.SYSTEM_UPDATE[2])
+        self.assertTrue(all(why for *_rest, why in dg.SCREENS_TODO))
+
+    def test_every_card_drives_something_the_window_knows(self):
+        known = {"fan-mode", "fn-key", "kb-level", "touchpad"}
+        for card in dg.CARDS:
+            if card.how is None:
+                continue
+            kind, _, name = card.how.partition(":")
+            if kind == "knob":
+                self.assertIn(name, dm.KNOB_BY_KEY)
+            elif kind == "feature":
+                self.assertIn(name, {f.name for f in dm.FEATURES})
+            else:
+                self.assertIn(card.how, known)
+
+    def test_fan_modes_are_myasus_names_over_platform_profile(self):
+        self.assertEqual([title for _k, title, _v, _d in dg.FAN_MODES],
+                         ["Standard", "Whisper", "Performance"])
+        self.assertEqual(dg.fan_mode_of("quiet"), "whisper")
+        self.assertEqual(dg.fan_mode_of(""), "")
+
+    def test_home_tiles(self):
+        g = dm.Glance(fan_mode="performance", keyboard="docked")
+        tiles = {key: value for key, _t, value, _i in dg.home_tiles(g)}
+        self.assertEqual(tiles["fan"], "Performance")
+        self.assertEqual(tiles["keyboard"], "docked")
+
+    def test_page_names_old_and_new(self):
+        self.assertEqual(dg.page_target("device/input"), ("device", "input"))
+        self.assertEqual(dg.page_target("doctor"), ("diagnosis", "tool"))
+        self.assertEqual(dg.page_target("overview"), ("home", ""))
+        for bad in ("device/nowhere", "glidex", "nowhere"):
+            with self.assertRaises(ValueError):
+                dg.page_target(bad)
 
 
 class Toasts(unittest.TestCase):
