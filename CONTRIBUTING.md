@@ -39,7 +39,11 @@ Conventions, in order of how much they have cost:
   testable (layout maths, HID parsing, config, the speaker chain). Hardware
   behaviour goes in HARDWARE.md instead.
 - Commit messages: `type(scope): imperative summary`, with a body that says
-  why. `feat` and `fix` only for user-visible behaviour.
+  why. `feat` and `fix` only for user-visible behaviour: the types decide
+  the next version number (`feat` minor, anything else patch, `!` breaking).
+- A change someone running the project would notice adds a file to
+  [`changelog.d/`](changelog.d/README.md). Never edit `CHANGELOG.md` or
+  `VERSION`: CI releases every merge that brings a fragment.
 
 ## Licensing
 

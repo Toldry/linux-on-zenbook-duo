@@ -64,6 +64,9 @@ nix/               flake + package + module. `nix flake check` builds and evalua
 tests/             make test. Add a test with every fix in a testable layer.
 windows/           a capture kit run on Windows (docs/WINDOWS-RE.md); stdlib, plus Frida and
                    numpy/sounddevice for two tools. Decoders tested in tests/test_windows_re.py.
+tools/release.py   VERSION + CHANGELOG.md, written by CI from changelog.d/ after each merge.
+changelog.d/       one fragment per user-visible change (changelog.d/README.md); never edit
+                   CHANGELOG.md or VERSION by hand.
 docs/              PLAN (A–Z) · HARDWARE (facts + how established) · FEATURES (parity) · DESIGN · install/
 ```
 

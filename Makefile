@@ -2,7 +2,7 @@
 
 PYTHON ?= python3
 
-.PHONY: help install install-system install-user uninstall dry-run doctor status features screen test lint preset
+.PHONY: help install install-system install-user uninstall dry-run doctor status features screen test lint preset changelog
 
 help:
 	@echo "targets:"
@@ -17,6 +17,7 @@ help:
 	@echo "  make screen          - duo, the screen (bin/duo --snapshot VIEW prints one frame as text)"
 	@echo "  make test            - shell + python unit tests (sudo make test covers root-only cases)"
 	@echo "  make lint            - bash -n, shellcheck (if installed), py_compile"
+	@echo "  make changelog       - preview the next release's CHANGELOG section (changelog.d/README.md)"
 	@echo "  make preset          - regenerate presets/easyeffects/duo-speakers.json from lib/speaker_dsp.py"
 
 install:
@@ -55,10 +56,14 @@ lint:
 	@if command -v shellcheck >/dev/null 2>&1; then \
 	  shellcheck -x bin/duo-cli helper/zenduo-helper install.sh uninstall.sh lib/conf.sh system/*.sh tests/*.sh; \
 	else echo "shellcheck not installed — skipped (CI runs it)"; fi
-	$(PYTHON) -m py_compile bin/duo lib/*.py tests/*.py windows/*.py
+	$(PYTHON) -m py_compile bin/duo lib/*.py tests/*.py tools/*.py windows/*.py
+	$(PYTHON) tools/release.py check
 	@# The trap that shipped three times: a pipe into grep -q under pipefail.
 	@if grep -nE '\|[[:space:]]*grep[[:space:]]+-[a-zA-Z]*q' bin/duo-cli install.sh uninstall.sh lib/conf.sh system/*.sh | grep -v '^[^:]*:[0-9]*:[[:space:]]*#'; then \
 	  echo "^ never pipe into grep -q (see docs/DESIGN.md) — capture, then match" >&2; exit 1; fi
 
 preset:
 	$(PYTHON) lib/speaker_dsp.py preset > presets/easyeffects/duo-speakers.json
+
+changelog:
+	$(PYTHON) tools/release.py draft
