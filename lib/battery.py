@@ -27,6 +27,9 @@ Bluetooth); otherwise the answer is "unknown". watch-fn clears the saved
 report each time it initialises the keyboard, so a value shown is always
 from the current connection.
 
+watch-fn also pops up a warning as the keyboard drops through 20, 10, 5
+and 1 % (LowAlarm), from whichever source has a value.
+
 Usage: battery.py            print both, one line each
 """
 
@@ -198,6 +201,71 @@ def keyboard_text(reachable, sysfs_pct=None, upower_pct=None, status=None, now=N
             ago = "just now" if age < 60 else f"{age // 60} min ago"
             return f"{pct} % (keyboard's own report, {ago}; unconfirmed)"
     return "unknown (the keyboard has not reported it yet)"
+
+
+def keyboard_percent(status=None, sysfs_pct=None, upower_pct=None):
+    """(percent, source) from the best source that has one, or None.
+    source is "kernel", "bluetooth" or "report" (the unconfirmed guess)."""
+    if sysfs_pct is not None:
+        return sysfs_pct, "kernel"
+    if upower_pct is not None:
+        return upower_pct, "bluetooth"
+    pct = status_percent(status[0]) if status else None
+    return (pct, "report") if pct is not None else None
+
+
+# ── the low-battery popup ─────────────────────────────────────────────────────
+
+LOW_LEVELS = (20, 10, 5, 1)   # asked for by the owner, 2026-10-31
+REARM_ABOVE = 3               # points over a level before it can warn again
+
+
+class LowAlarm:
+    """Which low-battery warning is due, once per level on the way down.
+
+    A drop past several levels at once (a first reading of 4 %) warns once,
+    for the lowest. A level warns again only after the battery has climbed
+    REARM_ABOVE points past it, so a reading that wobbles 10/11/10 does not
+    pop up every time.
+    """
+
+    def __init__(self, levels=LOW_LEVELS):
+        self.levels = sorted(levels, reverse=True)
+        self.warned = set()
+
+    def update(self, pct):
+        for level in list(self.warned):
+            if pct > level + REARM_ABOVE:
+                self.warned.discard(level)
+        crossed = [lv for lv in self.levels if pct <= lv and lv not in self.warned]
+        if not crossed:
+            return None
+        self.warned.update(lv for lv in self.levels if pct <= lv)
+        return min(crossed)
+
+
+def low_message(pct, source):
+    """(urgency, title, body) of the popup."""
+    title = f"Keyboard battery at {pct} %"
+    body = "Dock the keyboard on the laptop or plug it in to charge it."
+    if source == "report":
+        body += (" (From the keyboard's own status report, which is not confirmed"
+                 " to be its battery level yet.)")
+    return ("critical" if pct <= 5 else "normal"), title, body
+
+
+def notify(pct, source, run=subprocess.run):
+    """Show the popup; False when it could not be shown (no notify-send,
+    no session bus). Never raises: a popup must not take watch-fn down."""
+    if not shutil.which("notify-send"):
+        return False
+    urgency, title, body = low_message(pct, source)
+    try:
+        run(["notify-send", "-u", urgency, "-a", "Zenbook Duo", "-i", "battery-caution",
+             title, body], capture_output=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return True
 
 
 def main(argv):

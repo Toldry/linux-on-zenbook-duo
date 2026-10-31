@@ -102,5 +102,38 @@ class KeyboardText(unittest.TestCase):
         self.assertTrue(battery.keyboard_text(True).startswith("unknown"))
 
 
+class LowAlarm(unittest.TestCase):
+    def run_down(self, readings):
+        alarm = battery.LowAlarm()
+        return [alarm.update(p) for p in readings]
+
+    def test_each_level_once_on_the_way_down(self):
+        got = self.run_down([25, 20, 19, 15, 10, 10, 9, 6, 5, 3, 1, 0])
+        self.assertEqual([x for x in got if x is not None], [20, 10, 5, 1])
+        self.assertEqual(got[1], 20)
+
+    def test_a_jump_warns_once_for_the_lowest(self):
+        self.assertEqual(self.run_down([4, 3, 2]), [5, None, None])
+
+    def test_a_wobble_does_not_repeat_and_a_charge_rearms(self):
+        got = self.run_down([10, 11, 10, 12, 10, 30, 20])
+        self.assertEqual(got, [10, None, None, None, None, None, 20])
+
+    def test_the_message(self):
+        urgency, title, body = battery.low_message(5, "report")
+        self.assertEqual((urgency, title), ("critical", "Keyboard battery at 5 %"))
+        self.assertIn("not confirmed", body)
+        urgency, _title, body = battery.low_message(20, "bluetooth")
+        self.assertEqual(urgency, "normal")
+        self.assertNotIn("not confirmed", body)
+
+    def test_the_best_source_wins(self):
+        report = (bytes([0x5A, 0x3D, 0x05, 0x09]), 0)
+        self.assertEqual(battery.keyboard_percent(report, 40, 50), (40, "kernel"))
+        self.assertEqual(battery.keyboard_percent(report, None, 50), (50, "bluetooth"))
+        self.assertEqual(battery.keyboard_percent(report), (5, "report"))
+        self.assertIsNone(battery.keyboard_percent(None))
+
+
 if __name__ == "__main__":
     unittest.main()
