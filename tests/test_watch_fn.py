@@ -389,3 +389,11 @@ class KeyboardBattery(unittest.TestCase):
             self.assertEqual(watch_fn.check_kb_battery(alarm, notify), 10)
             self.assertIsNone(watch_fn.check_kb_battery(alarm, notify))
         self.assertEqual(shown, [(9, "report")])
+
+    def test_no_popup_while_the_kernel_says_it_charges(self):
+        from unittest import mock
+        b = watch_fn.battery
+        with mock.patch.object(b, "load_status", return_value=None), \
+                mock.patch.object(b, "keyboard_sysfs", return_value=(4, "charging")), \
+                mock.patch.object(b, "keyboard_upower", return_value=None):
+            self.assertIsNone(watch_fn.check_kb_battery(b.LowAlarm(), lambda *_: True))

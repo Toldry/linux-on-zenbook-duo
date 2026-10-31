@@ -51,10 +51,10 @@ POWER_SUPPLY = "/sys/class/power_supply"
 # sysfs `status` of the ACPI battery, in words for the window.
 LAPTOP_STATUS = {
     "Charging": "charging",
-    "Discharging": "on battery",
+    "Discharging": "not charging, on battery",
     "Full": "full, on the charger",
     # What the battery says once it reaches charge_control_end_threshold.
-    "Not charging": "on the charger, not charging (charge limit)",
+    "Not charging": "not charging, on the charger (charge limit)",
 }
 
 
@@ -144,17 +144,46 @@ def _is_keyboard(device_dir):
     return f":0000{kb_init.VID}:" in text or "ZENBOOK DUO" in text
 
 
+# sysfs `status` (kernel) and UPower `state`, in the words the window uses.
+CHARGE_WORDS = {
+    "Charging": "charging", "charging": "charging",
+    "Discharging": "not charging", "discharging": "not charging",
+    "Not charging": "not charging", "pending-charge": "not charging",
+    "Full": "full", "fully-charged": "full",
+}
+
+
+def status_charging(data):
+    """The guessed charging state in a `5a 3d XX YY` report, or "".
+
+    **GUESS, about 60 %**: YY is nonzero while it charges. On Linux the
+    report rose 05 -> 06 with YY = 09 (2026-10-30); under Windows it read
+    `63 00` on Bluetooth and `64 00` (full) docked (docs/HARDWARE.md).
+    """
+    if status_percent(data) is None or len(data) < 4:
+        return ""
+    return "charging" if data[3] else "not charging"
+
+
+def _is_keyboard(device_dir):
+    """Whether a power_supply node belongs to the Duo keyboard: matched as
+    kb_init matches its hidraw nodes (vendor id on any bus, or the name)."""
+    text = _read(os.path.join(device_dir, "device", "uevent")).upper()
+    return f":0000{kb_init.VID}:" in text or "ZENBOOK DUO" in text
+
+
 def keyboard_sysfs(root=POWER_SUPPLY):
-    """Percent from a kernel HID battery node of the keyboard, or None."""
+    """(percent, charge state) from a kernel HID battery node of the
+    keyboard, or None. The state is "" when the node has no `status`."""
     for node in sorted(glob.glob(os.path.join(root, "hid-*"))):
         cap = _read(os.path.join(node, "capacity"))
         if cap.isdigit() and _is_keyboard(node):
-            return int(cap)
+            return int(cap), CHARGE_WORDS.get(_read(os.path.join(node, "status")), "")
     return None
 
 
 def parse_upower(text):
-    """Percent of the Duo keyboard in `upower --dump` output, or None."""
+    """(percent, charge state) of the Duo keyboard in `upower --dump`, or None."""
     for block in text.split("\n\n"):
         fields = {}
         for line in block.splitlines():
@@ -165,7 +194,7 @@ def parse_upower(text):
         pct = fields.get("percentage", "").rstrip("%").strip()
         if "ZENBOOK DUO" in model or ("ASUS" in model and "keyboard" in block):
             try:
-                return round(float(pct))
+                return round(float(pct)), CHARGE_WORDS.get(fields.get("state", ""), "")
             except ValueError:
                 continue
     return None
@@ -185,33 +214,35 @@ def keyboard_reachable():
     return any(True for _ in kb_init.keyboard_hidraw_nodes())
 
 
-def keyboard_text(reachable, sysfs_pct=None, upower_pct=None, status=None, now=None):
+def keyboard_reading(status=None, sysfs=None, upower=None):
+    """(percent, charge state, source) from the best source, or None.
+    source is "kernel", "bluetooth" or "report" (the unconfirmed guess)."""
+    if sysfs is not None:
+        return sysfs[0], sysfs[1], "kernel"
+    if upower is not None:
+        return upower[0], upower[1], "bluetooth"
+    pct = status_percent(status[0]) if status else None
+    if pct is None:
+        return None
+    return pct, status_charging(status[0]), "report"
+
+
+def keyboard_text(reachable, sysfs=None, upower=None, status=None, now=None):
     """What the window says about the keyboard battery."""
     if not reachable:
         return "unknown (the keyboard is not connected)"
-    if sysfs_pct is not None:
-        return f"{sysfs_pct} %"
-    if upower_pct is not None:
-        return f"{upower_pct} % (Bluetooth)"
-    if status is not None:
-        data, stamp = status
-        pct = status_percent(data)
-        if pct is not None:
-            age = max(0, int((time.time() if now is None else now) - stamp))
-            ago = "just now" if age < 60 else f"{age // 60} min ago"
-            return f"{pct} % (keyboard's own report, {ago}; unconfirmed)"
-    return "unknown (the keyboard has not reported it yet)"
-
-
-def keyboard_percent(status=None, sysfs_pct=None, upower_pct=None):
-    """(percent, source) from the best source that has one, or None.
-    source is "kernel", "bluetooth" or "report" (the unconfirmed guess)."""
-    if sysfs_pct is not None:
-        return sysfs_pct, "kernel"
-    if upower_pct is not None:
-        return upower_pct, "bluetooth"
-    pct = status_percent(status[0]) if status else None
-    return (pct, "report") if pct is not None else None
+    reading = keyboard_reading(status, sysfs, upower)
+    if reading is None:
+        return "unknown (the keyboard has not reported it yet)"
+    pct, state, source = reading
+    text = f"{pct} %, {state or 'charging state unknown'}"
+    if source == "bluetooth":
+        return text + " (Bluetooth)"
+    if source == "report":
+        age = max(0, int((time.time() if now is None else now) - status[1]))
+        ago = "just now" if age < 60 else f"{age // 60} min ago"
+        return text + f" (keyboard's own report, {ago}; unconfirmed)"
+    return text
 
 
 # ── the low-battery popup ─────────────────────────────────────────────────────

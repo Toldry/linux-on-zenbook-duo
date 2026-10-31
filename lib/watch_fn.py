@@ -487,12 +487,18 @@ BATTERY_CHECK_SECONDS = 60
 
 
 def check_kb_battery(alarm, notify=battery.notify):
-    """Pop up a warning when the keyboard battery drops through a low level."""
-    reading = battery.keyboard_percent(battery.load_status(), battery.keyboard_sysfs(),
+    """Pop up a warning when the keyboard battery drops through a low level.
+
+    Not while the kernel or UPower says it is charging; the 5a 3d report's
+    charging state is only a guess, so it never silences a warning.
+    """
+    reading = battery.keyboard_reading(battery.load_status(), battery.keyboard_sysfs(),
                                        battery.keyboard_upower())
     if reading is None:
         return None
-    pct, source = reading
+    pct, state, source = reading
+    if state == "charging" and source != "report":
+        return None
     level = alarm.update(pct)
     if level is not None:
         shown = notify(pct, source)
