@@ -41,7 +41,10 @@
 #   --force                proceed on hardware that is not a Zenbook Duo
 #   --user NAME            (when run as root) the account the tooling is for
 set -euo pipefail
-cd "$(dirname "$(readlink -f "$0")")"
+# The script's own path, resolved before the cd: a relative $0 would then
+# name a different file, and it is run again (as root, for the system half).
+SELF="$(readlink -f "$0")"
+cd "$(dirname "$SELF")"
 SRC="$PWD"
 
 log()  { printf '\033[1;34m[zenduo]\033[0m %s\n' "$*"; }
@@ -87,7 +90,7 @@ while [ $# -gt 0 ]; do
     --no-bluetooth-stereo)   BT_STEREO=0; USER_FLAGS+=("$1") ;;
     --audio-realtime)        AUDIO_RT=1; USER_FLAGS+=("$1") ;;
     --no-audio-realtime)     AUDIO_RT=0; USER_FLAGS+=("$1") ;;
-    -h|--help)           sed -n '2,/^[^#]/{/^[^#]/!p}' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help)           sed -n '2,/^[^#]/{/^[^#]/!p}' "$SELF" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) die "unknown argument: $1 (see --help)" ;;
   esac
   shift
@@ -374,7 +377,7 @@ if [ "$(id -u)" = 0 ]; then
       # user half for real, and dropped --battery-limit, --speaker-dsp and
       # --prefix on the floor (reproduced 2026-09-05).
       runuser -u "$TARGET_USER" -- env "XDG_RUNTIME_DIR=/run/user/$uid" "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$uid/bus" \
-        HOME="$(getent passwd "$TARGET_USER" | cut -d: -f6)" bash "$0" "${USER_FLAGS[@]}" --user \
+        HOME="$(getent passwd "$TARGET_USER" | cut -d: -f6)" bash "$SELF" "${USER_FLAGS[@]}" --user \
         || warn "user half failed — re-run as $TARGET_USER: ./install.sh --user ${USER_FLAGS[*]}"
     fi
   fi

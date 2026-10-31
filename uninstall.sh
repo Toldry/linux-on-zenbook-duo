@@ -8,7 +8,10 @@
 #   --revert-grub               also remove i915.enable_psr=0 (expect OLED flicker)
 #   --prefix DIR                where it was installed (default /usr/local)
 set -euo pipefail
-cd "$(dirname "$(readlink -f "$0")")"
+# The script's own path, resolved before the cd: a relative $0 would then
+# name a different file, and it is run again (as root, for the system half).
+SELF="$(readlink -f "$0")"
+cd "$(dirname "$SELF")"
 
 log()  { printf '\033[1;34m[zenduo]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[zenduo:warn]\033[0m %s\n' "$*" >&2; }
@@ -23,7 +26,7 @@ while [ $# -gt 0 ]; do
     --purge) PURGE=1 ;;
     --revert-grub) REVERT_GRUB=1 ;;
     --prefix) [ $# -ge 2 ] || { echo "--prefix needs a directory" >&2; exit 64; }; PREFIX="$2"; shift ;;
-    -h|--help) sed -n '2,/^[^#]/{/^[^#]/!p}' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,/^[^#]/{/^[^#]/!p}' "$SELF" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 64 ;;
   esac
   shift
@@ -143,7 +146,7 @@ if [ "$DO_SYSTEM" = 1 ]; then
   else
     args=(--system --prefix "$PREFIX")
     [ "$REVERT_GRUB" = 1 ] && args+=(--revert-grub)
-    sudo bash "$0" "${args[@]}"
+    sudo bash "$SELF" "${args[@]}"
   fi
 fi
 if [ "$DO_USER" = 1 ] && [ "$(id -u)" = 0 ]; then
