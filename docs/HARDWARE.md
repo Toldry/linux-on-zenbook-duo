@@ -98,9 +98,13 @@ kept so code comments and the research stay cross-referenced.
   modifier Left GUI, usage P), with no vendor report, so GNOME raises its
   display switcher (measured 2026-10-30, `duo fn-probe` and `duo
   watch-input`). It can only be rebound in GNOME's shortcuts: `duo hotkeys`.
-  Super and P come in that one report, where a hand sends Super first; that
-  is how `duo super-p` tells F7 from a typed Super+P (lib/hotkeys.py). The
-  report's shape on Bluetooth is **VERIFY-ON-HW**. Volume and mute
+  Corrected 2026-11-09 by a timed capture: F7 sends exactly what a hand does,
+  Super alone first (`02 08 00 00`), then Super with P, then the releases.
+  Over Bluetooth the reports carry report id `02` (9 bytes); docked they come
+  without it (`08 00 13 …`, 8 bytes). The only difference is time: on
+  Bluetooth F7's P followed its Super by 0.1, 6.9 and 8.6 ms, a hand's by
+  502 to 570 ms, and 67 ms when trying to be quick. `duo super-p` calls a gap
+  under 30 ms F7 (lib/hotkeys.py). The gap docked is **VERIFY-ON-HW**. Volume and mute
   arrive as standard consumer-page usages and work natively.
 - **Keyboard backlight** is `{0x5a, 0xba, 0xc5, 0xc4, level}` padded to the
   interface's report length. Docking, undocking and resume blank it in

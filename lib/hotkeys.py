@@ -9,18 +9,19 @@ binds Super+P to `switch-monitor`, the switcher F7 used to raise, and GNOME
 cannot tell F7 from a typed Super+P. So Super+P comes out of `switch-monitor`
 and goes to a custom shortcut running `duo super-p`, which decides:
 
-- F7 sends Super and P in ONE keyboard report (`02 08 00 13`, docs/HARDWARE.md,
-  measured 2026-10-30 docked). A hand types Super first: one report with the
-  modifier alone, then one with P. watch-fn reads those reports from the
-  keyboard's hidraw nodes (ChordWatch) and leaves a mark when it sees the
-  one-report kind (mark_f7).
+- F7 and a typed Super+P send the same reports: Super alone, then Super
+  with P. They differ in time. Measured 2026-11-09 on Bluetooth: F7's P came
+  0.1, 6.9 and 8.6 ms after its Super; a hand took 502 to 570 ms, and 67 ms
+  trying to be fast. watch-fn reads those reports from the keyboard's hidraw
+  nodes (ChordWatch) and leaves a mark when P follows Super within
+  F7_GAP (mark_f7).
 - `duo super-p` waits briefly for that mark. Marked: `duo terminal`. Not
   marked (typed by hand, on any keyboard): GNOME's own display switcher,
   raised through the Shell extension, or `duo layout cycle` without it.
 
 So without watch-fn F7 falls back to the switcher, never Super+P to the
-terminal. Whether the Bluetooth report has the same shape is VERIFY-ON-HW;
-if it does not, F7 on Bluetooth raises the switcher.
+terminal. The gap docked (USB) is VERIFY-ON-HW; the reports there are the
+same bytes without the report id (captured 2026-11-09).
 
 Everything is GNOME's own settings, written through the gsettings command.
 Other entries in `switch-monitor` (XF86Display) and the user's own custom
@@ -179,28 +180,51 @@ USAGE_P = 0x13         # HID keyboard page usage of P
 MARK_FILE = "f7-pressed"
 MARK_FRESH = 1.0       # seconds after F7 that its mark still counts
 MARK_WAIT = 0.25       # how long super-p waits for watch-fn's mark
+F7_GAP = 0.030         # Super to P: F7 took at most 8.6 ms, a hand 67 ms or more
 
 
 class ChordWatch:
-    """Which Super+P reports came from F7: modifier and P in one report.
+    """Which Super+P reports came from F7: P within F7_GAP of Super.
 
-    Keyboard reports are [report id, modifiers, reserved, keys...]. Fed every
-    report of every keyboard hidraw node; remembers the modifiers each
-    (node, report id) last sent, so P arriving with Super already held is a
-    hand, and P arriving together with Super is the key.
+    A keyboard report is [modifiers, reserved, keys...], with the report id in
+    front over Bluetooth (`02 08 00 13 …`, 9 bytes) and without it docked
+    (`08 00 13 …`, 8 bytes), both captured 2026-11-09. Fed every report of
+    every keyboard hidraw node; per node it remembers when Super went down
+    with no key, and calls the P that follows within F7_GAP the key's.
     """
 
-    def __init__(self):
-        self.modifiers = {}
+    def __init__(self, clock=time.monotonic):
+        self.clock = clock
+        self.super_at = {}
+
+    @staticmethod
+    def keyboard_report(data):
+        """(modifiers, keys) of a keyboard report, or None for anything else."""
+        if len(data) == 8:
+            body = data
+        elif len(data) >= 9 and data[0] != VENDOR_REPORT_ID:
+            body = data[1:]
+        else:
+            return None
+        if body[1] != 0:
+            return None
+        return body[0], [k for k in body[2:] if k]
 
     def is_f7(self, node, data):
-        if len(data) < 4 or data[0] == VENDOR_REPORT_ID or data[2] != 0:
+        report = self.keyboard_report(data)
+        if report is None:
             return False
-        key = (node, data[0])
-        before = self.modifiers.get(key, 0)
-        self.modifiers[key] = data[1]
-        return bool(data[1] & LEFT_GUI) and USAGE_P in data[3:] \
-            and not before & LEFT_GUI
+        modifiers, keys = report
+        now = self.clock()
+        if modifiers == LEFT_GUI and not keys:
+            self.super_at.setdefault(node, now)
+            return False
+        if modifiers == LEFT_GUI and keys == [USAGE_P]:
+            down = self.super_at.pop(node, None)
+            return down is not None and now - down <= F7_GAP
+        if not modifiers & LEFT_GUI:
+            self.super_at.pop(node, None)
+        return False
 
 
 def mark_path():

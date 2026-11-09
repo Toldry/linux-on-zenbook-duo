@@ -91,34 +91,53 @@ if __name__ == "__main__":
 
 
 class ChordWatch(unittest.TestCase):
-    """F7 types Super and P in one report; a hand types Super first."""
+    """F7 and a typed Super+P send the same reports; only the gap differs.
+    The byte sequences and gaps are the owner's captures of 2026-11-09."""
 
-    F7 = bytes([0x02, 0x08, 0x00, 0x13, 0, 0, 0, 0])
-    SUPER = bytes([0x02, 0x08, 0x00, 0x00, 0, 0, 0, 0])
-    RELEASED = bytes([0x02, 0x00, 0x00, 0x00, 0, 0, 0, 0])
+    BT = {"none": "02 00 00 00 00 00 00 00 00", "super": "02 08 00 00 00 00 00 00 00",
+          "super_p": "02 08 00 13 00 00 00 00 00"}
+    USB = {"none": "00 00 00 00 00 00 00 00", "super": "08 00 00 00 00 00 00 00",
+           "super_p": "08 00 13 00 00 00 00 00"}
 
-    def test_f7_is_one_report(self):
-        chords = hk.ChordWatch()
-        self.assertTrue(chords.is_f7("/dev/hidraw1", self.F7))
-        self.assertFalse(chords.is_f7("/dev/hidraw1", self.RELEASED))
-        self.assertTrue(chords.is_f7("/dev/hidraw1", self.F7))   # pressed again
+    def press(self, reports, gap_ms, chords=None, now=None, node="/dev/hidraw4"):
+        """Super, then P gap_ms later, then the releases; True if called F7."""
+        now = now if now is not None else [100.0]
+        chords = chords or hk.ChordWatch(clock=lambda: now[0])
+        seen = []
+        for name, after_ms in (("super", 0), ("super_p", gap_ms), ("super", 90),
+                               ("none", 240)):
+            now[0] += after_ms / 1000
+            seen.append(chords.is_f7(node, bytes.fromhex(reports[name])))
+        self.assertEqual(seen.count(True), 1 if seen[1] else 0)
+        return seen[1]
 
-    def test_a_typed_super_p_is_not_f7(self):
-        chords = hk.ChordWatch()
-        self.assertFalse(chords.is_f7("/dev/hidraw1", self.SUPER))
-        self.assertFalse(chords.is_f7("/dev/hidraw1", self.F7))
+    def test_f7_on_bluetooth(self):
+        for gap in (0.1, 6.9, 8.6):
+            self.assertTrue(self.press(self.BT, gap), gap)
 
-    def test_nodes_and_report_ids_are_tracked_apart(self):
-        chords = hk.ChordWatch()
-        chords.is_f7("/dev/hidraw1", self.SUPER)
-        self.assertTrue(chords.is_f7("/dev/hidraw2", self.F7))
+    def test_a_hand_on_bluetooth(self):
+        for gap in (502.2, 533.0, 569.9, 67.1):
+            self.assertFalse(self.press(self.BT, gap), gap)
+
+    def test_docked_reports_have_no_report_id(self):
+        self.assertTrue(self.press(self.USB, 1.0))
+        self.assertFalse(self.press(self.USB, 300.0))
+
+    def test_f7_twice_in_a_row(self):
+        now = [100.0]
+        chords = hk.ChordWatch(clock=lambda: now[0])
+        self.assertTrue(self.press(self.BT, 1.0, chords, now))
+        now[0] += 1.0
+        self.assertTrue(self.press(self.BT, 1.0, chords, now))
+        self.assertFalse(self.press(self.BT, 400.0, chords, now))
 
     def test_other_reports_are_ignored(self):
-        chords = hk.ChordWatch()
-        self.assertFalse(chords.is_f7("n", bytes([0x5A, 0x08, 0x00, 0x13])))  # vendor
-        self.assertFalse(chords.is_f7("n", bytes([0x02, 0x08, 0x01, 0x13])))  # not a key report
-        self.assertFalse(chords.is_f7("n", bytes([0x02, 0x08])))              # too short
-        self.assertFalse(chords.is_f7("n", bytes([0x02, 0x02, 0x00, 0x13])))  # Shift+P
+        chords = hk.ChordWatch(clock=lambda: 0.0)
+        for text in ("5a 08 00 13 00 00 00 00 00 00 00 00 00 00 00 00",  # vendor
+                     "02 08 01 13 00 00 00 00 00",                        # reserved set
+                     "02 08",                                             # too short
+                     "02 02 00 13 00 00 00 00 00"):                       # Shift+P
+            self.assertFalse(chords.is_f7("n", bytes.fromhex(text)), text)
 
 
 class Mark(unittest.TestCase):
