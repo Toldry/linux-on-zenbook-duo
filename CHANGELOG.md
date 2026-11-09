@@ -4,6 +4,22 @@ Every release of linux-on-zenbook-duo, newest first. CI writes this file from
 [`changelog.d/`](changelog.d/README.md) after each merge; do not edit it by
 hand. `duo version` prints the release you have.
 
+## 0.15.1 — 2026-11-09
+
+### Fixes
+
+- F7 opens the terminal again. The check that told it from a typed Super+P
+  relied on F7 sending both keys in one report, which a timed capture showed
+  it does not: it sends the same reports a hand does, only faster. watch-fn
+  now calls a P that follows Super within 30 ms F7 (measured on Bluetooth:
+  under 9 ms for F7, 67 ms or more by hand); restart it with
+  `systemctl --user restart duo-watch-fn` after updating
+- the Zenbook Duo GNOME Shell extension now loads on GNOME 50 (Ubuntu
+  26.04). GNOME refused it because its list of supported versions stopped
+  at 49, so F8's window swap, the Fn-key popups and the Super+P display
+  switcher did nothing there. Run `duo swap-screens --enable` (or
+  `./install.sh`), then log out and back in
+
 ## 0.15.0 — 2026-11-09
 
 ### Super+P is the display switcher again; only F7 opens a terminal
