@@ -13,7 +13,7 @@
 # Order: 00 preflight (read-only) → 10 packages → 20 kernel → 30 GRUB →
 #        40 the duo CLI → 45 udev → 46 speaker-amp check → 50 root helper +
 #        sudoers → 55 touchpad quirk → 57 fan mode kept out of
-#        GNOME's Power Mode.
+#        GNOME's Power Mode → 58 Power Mode follows the charger (opt in).
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 source ./lib.sh
@@ -23,6 +23,7 @@ usage_text() {
 usage: run.sh [--dry-run] [--force] [--dev] [--prefix DIR] [--user NAME]
               [--hwe-kernel|--no-hwe-kernel] [--no-psr-fix] [--no-palm-rejection]
               [--no-amp-check] [--no-separate-fan]
+              [--power-follows-ac|--no-power-follows-ac] [--battery-shutdown MIN]
 USAGE
 }
 
@@ -43,6 +44,9 @@ while [ $# -gt 0 ]; do
     --no-amp-check)      ZENDUO_AMP_CHECK=0 ;;
     --separate-fan)      ZENDUO_SEPARATE_FAN=1 ;;
     --no-separate-fan)   ZENDUO_SEPARATE_FAN=0 ;;
+    --power-follows-ac)  ZENDUO_POWER_FOLLOWS_AC=1 ;;
+    --no-power-follows-ac) ZENDUO_POWER_FOLLOWS_AC=0 ;;
+    --battery-shutdown)  [ $# -ge 2 ] || die "--battery-shutdown needs minutes (0-1440)"; ZENDUO_BATTERY_SHUTDOWN="$2"; shift ;;
     -h|--help)           usage_text; exit 0 ;;
     *) die "unknown argument: $1 ($(usage_text))" ;;
   esac
@@ -55,11 +59,12 @@ export ZENDUO_TARGET_USER="${ZENDUO_TARGET_USER:-}"
 export ZENDUO_HWE_KERNEL="${ZENDUO_HWE_KERNEL:-}" ZENDUO_PSR_FIX="${ZENDUO_PSR_FIX:-}"
 export ZENDUO_PALM_REJECTION="${ZENDUO_PALM_REJECTION:-}" ZENDUO_AMP_CHECK="${ZENDUO_AMP_CHECK:-}"
 export ZENDUO_SEPARATE_FAN="${ZENDUO_SEPARATE_FAN:-}"
+export ZENDUO_POWER_FOLLOWS_AC="${ZENDUO_POWER_FOLLOWS_AC:-}" ZENDUO_BATTERY_SHUTDOWN="${ZENDUO_BATTERY_SHUTDOWN:-}"
 
 require_root
 log "zenduo $(cat "$ZENDUO_SRC/VERSION" 2>/dev/null || echo dev) — system layer   dry run: $DRY_RUN   prefix: $ZENDUO_PREFIX"
 
-for script in 00-preflight.sh 10-packages.sh 20-kernel.sh 30-grub.sh 40-cli.sh 45-udev.sh 46-speaker-amp.sh 50-sudoers.sh 55-touchpad.sh 57-power-profiles.sh; do
+for script in 00-preflight.sh 10-packages.sh 20-kernel.sh 30-grub.sh 40-cli.sh 45-udev.sh 46-speaker-amp.sh 50-sudoers.sh 55-touchpad.sh 57-power-profiles.sh 58-power-follows-ac.sh; do
   log "── $script"
   bash "./$script"
 done

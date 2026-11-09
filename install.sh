@@ -9,7 +9,8 @@
 #   --system   root: packages, kernel policy (Ubuntu), GRUB PSR fix, the `duo`
 #              and `duo-cli` commands, udev rules, the root helper + sudoers rule, the
 #              touchpad quirk, the speaker-amp reporter, the fan mode kept
-#              apart from GNOME's Power Mode.   (system/run.sh)
+#              apart from GNOME's Power Mode, and (opt in) the Power Mode
+#              following the charger.   (system/run.sh)
 #   --user     you: ~/.config/zenduo/zenduo.conf, the duo-* systemd user units,
 #              and the features you asked for, started now.
 #
@@ -19,6 +20,10 @@
 #   --no-palm-rejection    don't install the libinput touchpad quirk
 #   --no-amp-check         don't install the CS35L41 speaker-amp reporter
 #   --no-separate-fan      let GNOME's Power Mode change the fan mode (and vice versa)
+#   --power-follows-ac     Performance on the charger, Power Saver on battery
+#                          (/etc/zenduo/power.conf; kept until --no-power-follows-ac)
+#   --battery-shutdown MIN also power off after MIN minutes on battery, waking from
+#                          suspend if need be (0 = never; implies --power-follows-ac)
 #   --no-watch-displays    don't run the dock policy daemon
 #   --no-watch-fn          don't run the keyboard hotkey daemon
 #   --watch-backlight      also run the bottom-panel backlight sync daemon
@@ -64,8 +69,11 @@ while [ $# -gt 0 ]; do
     --dry-run|-n)        DRY_RUN=1; SYSTEM_FLAGS+=(--dry-run); USER_FLAGS+=(--dry-run) ;;
     --force)             FORCE=1; SYSTEM_FLAGS+=(--force) ;;
     --prefix)            [ $# -ge 2 ] || die "--prefix needs a directory"; PREFIX="$2"; SYSTEM_FLAGS+=(--prefix "$2"); USER_FLAGS+=(--prefix "$2"); shift ;;
-    --hwe-kernel|--no-hwe-kernel|--psr-fix|--no-psr-fix|--palm-rejection|--no-palm-rejection|--amp-check|--no-amp-check|--separate-fan|--no-separate-fan)
+    --hwe-kernel|--no-hwe-kernel|--psr-fix|--no-psr-fix|--palm-rejection|--no-palm-rejection|--amp-check|--no-amp-check|--separate-fan|--no-separate-fan|--power-follows-ac|--no-power-follows-ac)
                          SYSTEM_FLAGS+=("$1") ;;
+    --battery-shutdown)  [ $# -ge 2 ] || die "--battery-shutdown needs minutes (0-1440)"
+                         [[ "$2" =~ ^[0-9]+$ ]] && [ "$2" -le 1440 ] || die "--battery-shutdown must be 0-1440 minutes"
+                         SYSTEM_FLAGS+=(--battery-shutdown "$2"); shift ;;
     --watch-displays)    WATCH_DISPLAYS=1; USER_FLAGS+=("$1") ;;
     --no-watch-displays) WATCH_DISPLAYS=0; USER_FLAGS+=("$1") ;;
     --watch-fn)          WATCH_FN=1; USER_FLAGS+=("$1") ;;

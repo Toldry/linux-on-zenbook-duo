@@ -39,6 +39,7 @@ AMP_CHECK = "/usr/local/sbin/duo-cs35l41-check"
 # (the author's description of MyASUS, 2026-10-31); the GUI offers that or 100.
 BATTERY_CARE_PCT = 80
 SEPARATE_FAN_DROPIN = "/etc/systemd/system/power-profiles-daemon.service.d/50-zenduo-separate-fan.conf"
+POWER_FOLLOWS_AC = "/usr/local/sbin/zenduo-power"
 
 sys.path.insert(0, HERE)
 import audio_probe  # noqa: E402  (same directory)
@@ -83,6 +84,7 @@ FEATURES = [
     Feature("palm-rejection", "libinput quirk so disable-while-typing covers the detachable touchpad", scope="system", flag="palm-rejection"),
     Feature("amp-check", "notify when the CS35L41 speaker amps fail to power up", scope="system", flag="amp-check"),
     Feature("separate-fan", "fan mode (Fn+F) and GNOME's Power Mode are separate settings, as on Windows", scope="system", flag="separate-fan"),
+    Feature("power-follows-ac", "Power Mode follows the charger; optional power-off after a while on battery", scope="system", flag="power-follows-ac"),
 ]
 
 # ── the knobs, as the screen edits them ──────────────────────────────────────

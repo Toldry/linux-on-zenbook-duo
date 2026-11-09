@@ -139,9 +139,18 @@ system_half() {
     systemctl daemon-reload || true
     systemctl try-restart power-profiles-daemon.service || true
   fi
+  if [ -e /etc/systemd/system/zenduo-power.service ] || [ -e /usr/local/sbin/zenduo-power ]; then
+    systemctl stop zenduo-battery-poweroff.timer zenduo-battery-poweroff-warn.timer >/dev/null 2>&1 || true
+    systemctl disable zenduo-power.service >/dev/null 2>&1 || true
+    rm -f /etc/systemd/system/zenduo-power.service /usr/local/sbin/zenduo-power \
+      /etc/udev/rules.d/71-zenduo-power.rules /etc/zenduo/power.conf /run/zenduo/power-source
+    rmdir /etc/zenduo 2>/dev/null || true
+    systemctl daemon-reload || true
+    udevadm control --reload || true
+  fi
   rm -f "$PREFIX/bin/duo" "$PREFIX/bin/duo-cli"
   rm -rf "$PREFIX/lib/zenduo"
-  log "removed the commands, helper, sudoers rule, udev rule, touchpad quirk, amp reporter and fan mode separation"
+  log "removed the commands, helper, sudoers rule, udev rules, touchpad quirk, amp reporter, fan mode separation and power-follows-ac"
   if [ "$REVERT_GRUB" = 1 ] && [ -f "$GRUB_FILE" ]; then
     remove_grub_param "i915.enable_psr=0"
     [ "$GRUB_CHANGED" = 1 ] && grub_regenerate
