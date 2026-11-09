@@ -73,7 +73,7 @@ TOUCH_MAPPING=1
 
 # F7 opens a terminal instead of raising GNOME's display switcher (Ctrl+Alt+T
 # keeps working). F7 types a literal Super+P; watch-fn tells the two apart, so
-# a Super+P typed by hand still raises the switcher. Applied by ./install.sh
+# a Super+P typed by hand does nothing. Applied by ./install.sh
 # --user, or by hand with `duo hotkeys apply` (`duo hotkeys remove` undoes it).
 # 0 = GNOME's switcher for both.
 F7_TERMINAL=1
