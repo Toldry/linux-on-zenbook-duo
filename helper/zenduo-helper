@@ -9,6 +9,11 @@
 #   thermal <quiet|balanced|performance>
 #                                set platform_profile, asus-wmi's name for the
 #                                BIOS fan mode MyASUS sets on Fn+F
+#   power <ac> <battery> <minutes>
+#                                write the Power Modes (performance, balanced,
+#                                power-saver or none) and the minutes asleep on
+#                                battery before a power-off (0-1440) into
+#                                /etc/zenduo/power.conf, then apply them
 #   login-layout [--quiet]       copy the caller's ~/.config/monitors.xml to the
 #                                login screen's own copy, so the greeter comes up
 #                                on the monitor they last used
@@ -17,6 +22,7 @@ set -euo pipefail
 usage() {
   echo "usage: zenduo-helper backlight <device> <0-100> | batlimit <20-100>" >&2
   echo "       zenduo-helper thermal <quiet|balanced|performance>" >&2
+  echo "       zenduo-helper power <ac> <battery> <0-1440>   (performance|balanced|power-saver|none)" >&2
   echo "       zenduo-helper login-layout [--quiet]" >&2
   exit 64
 }
@@ -78,6 +84,38 @@ case "${1:-}" in
       *" $profile "*) echo "$profile" > "$node" ;;
       *) echo "zenduo-helper: $profile is not offered here (choices: $choices)" >&2; exit 65 ;;
     esac
+    ;;
+  power)
+    # Only edits a config the system install wrote (--power-follows-ac); it
+    # never installs the feature. Only the three value lines are rewritten.
+    ac="${2:-}" bat="${3:-}" min="${4:-}"
+    [ $# -eq 4 ] || usage
+    for p in "$ac" "$bat"; do
+      case "$p" in performance|balanced|power-saver|none) ;; *) usage ;; esac
+    done
+    [ "$ac" = none ] && ac=""
+    [ "$bat" = none ] && bat=""
+    [[ "$min" =~ ^[0-9]+$ ]] || usage
+    min=$((10#$min))  # normalize like the backlight verb
+    [ "$min" -le 1440 ] || usage
+    conf=/etc/zenduo/power.conf
+    decider=/usr/local/sbin/zenduo-power
+    if [ ! -f "$conf" ] || [ ! -x "$decider" ]; then
+      echo "zenduo-helper: power-follows-ac is not installed (sudo ./install.sh --system --power-follows-ac)" >&2
+      exit 66
+    fi
+    tmp="$(mktemp /etc/zenduo/.power.conf.XXXXXX)"
+    while IFS= read -r line || [ -n "$line" ]; do
+      case "$line" in
+        AC_PROFILE=*)               echo "AC_PROFILE=$ac" ;;
+        BATTERY_PROFILE=*)          echo "BATTERY_PROFILE=$bat" ;;
+        SHUTDOWN_AFTER_SLEEP_MIN=*) echo "SHUTDOWN_AFTER_SLEEP_MIN=$min" ;;
+        *)                          printf '%s\n' "$line" ;;
+      esac
+    done < "$conf" > "$tmp"
+    chmod 0644 "$tmp"
+    mv -f "$tmp" "$conf"
+    "$decider" --reset
     ;;
   login-layout)
     quiet=0

@@ -163,7 +163,7 @@ class MyAsusLayout(unittest.TestCase):
         self.assertTrue(all(why for *_rest, why in dg.SCREENS_TODO))
 
     def test_every_card_drives_something_the_window_knows(self):
-        known = {"fan-mode", "fn-key", "kb-level", "touchpad"}
+        known = {"fan-mode", "fn-key", "kb-level", "touchpad", "power-modes", "sleep-poweroff"}
         for card in dg.CARDS:
             if card.how is None:
                 continue
@@ -267,6 +267,28 @@ class Launcher(unittest.TestCase):
         self.assertEqual(entry["Exec"], "/usr/local/bin/duo-cli gui")
         self.assertEqual(entry["Type"], "Application")
         self.assertEqual(entry["Terminal"], "false")
+
+
+
+class PowerCards(unittest.TestCase):
+    def test_a_profile_maps_to_its_row_and_empty_to_leave_alone(self):
+        self.assertEqual(dg.POWER_MODES[dg.power_mode_index("power-saver")][0], "power-saver")
+        self.assertEqual(dg.POWER_MODES[dg.power_mode_index("")][1], "Leave as it is")
+        self.assertEqual(dg.power_mode_index("turbo"), dg.power_mode_index(""))
+
+    def test_a_hand_written_minute_count_is_offered_too(self):
+        self.assertIn(45, dg.sleep_poweroff_choices(45))
+        self.assertEqual(dg.sleep_poweroff_choices(60), dg.SLEEP_POWEROFF_MINUTES)
+
+    def test_labels(self):
+        self.assertEqual(dg.sleep_poweroff_label(0), "Never")
+        self.assertEqual(dg.sleep_poweroff_label(60), "After 1 hour asleep")
+        self.assertEqual(dg.sleep_poweroff_label(120), "After 2 hours asleep")
+        self.assertEqual(dg.sleep_poweroff_label(45), "After 45 minutes asleep")
+
+    def test_both_cards_are_available(self):
+        hows = {c.how for c in dg.CARDS}
+        self.assertLessEqual({"power-modes", "sleep-poweroff"}, hows)
 
 
 if __name__ == "__main__":

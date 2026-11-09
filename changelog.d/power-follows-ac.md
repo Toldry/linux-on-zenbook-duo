@@ -14,3 +14,10 @@
   Secure Boot. `sudo zenduo-power --status` shows what is set. Both are opt
   in and kept across re-runs until `--no-power-follows-ac`. Tested with a fake
   charger only, not yet run on the laptop
+- the window's Device Settings → Power & Performance has both: a Power Mode
+  card (on the charger, on battery) and the Sleep Assistant card, which
+  MyASUS uses for the same job. `duo power` and `duo power set AC BATTERY
+  MINUTES` do the same from a terminal, through one new root-helper verb
+  that only rewrites the three values in `/etc/zenduo/power.conf`
+- the window's list of system features now says whether each is installed;
+  it showed nothing for them before

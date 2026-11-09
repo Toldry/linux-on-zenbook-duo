@@ -729,19 +729,8 @@ class Services(View):
             if self.m.glance.dsp_installed:
                 return ("installed", "ok", "Enter: status")
             return ("absent", "off", "Enter: install")
-        if f.name == "psr-fix":
-            on = "i915.enable_psr=0" in dm._read("/proc/cmdline")
-            return ("active", "ok", "") if on else ("inactive", "off", "")
-        if f.name == "palm-rejection":
-            on = os.path.exists("/etc/libinput/local-overrides.quirks")
-            return ("installed", "ok", "") if on else ("absent", "off", "")
-        if f.name == "separate-fan":
-            on = os.path.exists(dm.SEPARATE_FAN_DROPIN)
-            return ("installed", "ok", "") if on else ("absent", "off", "")
-        if f.name == "power-follows-ac":
-            on = os.path.exists(dm.POWER_FOLLOWS_AC)
-            return ("installed", "ok", "") if on else ("absent", "off", "")
-        return ("?", "off", "")
+        text, level = dm.system_feature_state(f.name)
+        return (text, level, "")
 
     def render(self, cv, r):
         t, g = self.app.t, self.app.g

@@ -40,6 +40,7 @@ AMP_CHECK = "/usr/local/sbin/duo-cs35l41-check"
 BATTERY_CARE_PCT = 80
 SEPARATE_FAN_DROPIN = "/etc/systemd/system/power-profiles-daemon.service.d/50-zenduo-separate-fan.conf"
 POWER_FOLLOWS_AC = "/usr/local/sbin/zenduo-power"
+POWER_CONF = "/etc/zenduo/power.conf"   # written by system/58-power-follows-ac.sh, 0644
 
 sys.path.insert(0, HERE)
 import audio_probe  # noqa: E402  (same directory)
@@ -481,6 +482,7 @@ class Glance:
     dsp_installed: bool = False                      # the EasyEffects db is seeded
     fan_mode: str = ""                               # platform_profile: quiet | balanced | performance
     fn_lock: bool = False                            # kb_state's remembered Fn-lock
+    power: dict = None                               # read_power(): None = not installed
 
     @property
     def keyboard_text(self):
@@ -511,6 +513,7 @@ def read_glance():
     g.kb_level = kb_backlight.read_level()
     g.fan_mode = fan_profile.read(fan_profile.PROFILE)
     g.fn_lock = kb_state.read_fn_lock()
+    g.power = read_power()
     node = _glob_first("/sys/class/power_supply/BAT*/charge_control_end_threshold")
     g.battery_node = node
     g.battery_now = _read(node) if node else ""
@@ -533,6 +536,57 @@ def read_glance():
     except OSError:
         g.dsp_installed = False
     return g
+
+
+POWER_PROFILES = ("performance", "balanced", "power-saver")
+
+
+def read_power(path=POWER_CONF, decider=POWER_FOLLOWS_AC):
+    """{"ac", "battery", "minutes"} from /etc/zenduo/power.conf, or None when
+    power-follows-ac is not installed. A profile is "" when it is left alone.
+    Parsed like zenduo-power parses it, and anything it would ignore reads
+    the way it would act on it: an unknown profile as "", bad minutes as 0."""
+    if not os.access(decider, os.X_OK):
+        return None
+    try:
+        with open(path, encoding="utf-8") as handle:
+            lines = handle.read().splitlines()
+    except OSError:
+        return None
+    values = {}
+    for line in lines:
+        if line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values["".join(key.split())] = "".join(value.split()).strip('"')
+    def profile(key, default):
+        value = values.get(key, default)
+        return value if value in POWER_PROFILES or value == "" else ""
+    minutes = values.get("SHUTDOWN_AFTER_SLEEP_MIN", "0")
+    minutes = int(minutes) if minutes.isdigit() and int(minutes) <= 1440 else 0
+    return {"ac": profile("AC_PROFILE", "performance"),
+            "battery": profile("BATTERY_PROFILE", "power-saver"),
+            "minutes": minutes}
+
+
+# What shows a system feature is in place, for the ones with no unit to ask.
+SYSTEM_FEATURE_MARKERS = {
+    "palm-rejection": "/etc/libinput/local-overrides.quirks",
+    "separate-fan": SEPARATE_FAN_DROPIN,
+    "power-follows-ac": POWER_FOLLOWS_AC,
+}
+
+
+def system_feature_state(name, cmdline=None):
+    """(text, level) of a system feature that has no unit of its own; the
+    screen and the window both show this."""
+    if name == "psr-fix":
+        line = _read("/proc/cmdline") if cmdline is None else cmdline
+        return ("active", "ok") if "i915.enable_psr=0" in line.split() else ("inactive", "off")
+    path = SYSTEM_FEATURE_MARKERS.get(name)
+    if path is None:
+        return ("?", "off")
+    return ("installed", "ok") if os.path.exists(path) else ("absent", "off")
 
 
 def read_amp_state():
@@ -939,6 +993,12 @@ class Model:
     def fan_profile(self, mode):
         """`duo-cli fan-profile standard|whisper|performance`, MyASUS's names."""
         r = cli("fan-profile", mode)
+        self.refresh_fast()
+        return r
+
+    def set_power(self, ac, battery, minutes):
+        """`duo-cli power set`: "" for a profile means leave it alone."""
+        r = cli("power", "set", ac or "none", battery or "none", str(int(minutes)))
         self.refresh_fast()
         return r
 
