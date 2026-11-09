@@ -90,6 +90,11 @@ class Enable(unittest.TestCase):
                           repr(["other@x", shell_ext.UUID])])
 
 
+# The GNOME of the newest release README.md says this was run on: Ubuntu
+# 26.04.1 LTS ships GNOME 50.
+TESTED_GNOME = 50
+
+
 class Metadata(unittest.TestCase):
     def test_metadata_names_its_own_directory(self):
         with open(os.path.join(EXTENSION, "metadata.json")) as f:
@@ -97,6 +102,11 @@ class Metadata(unittest.TestCase):
         self.assertEqual(meta["uuid"], shell_ext.UUID)
         # GNOME 45 changed extensions to ES modules; this one is written as one.
         self.assertTrue(all(int(v) >= 45 for v in meta["shell-version"]))
+        # GNOME refuses to load an extension that does not list its version,
+        # and says so nowhere the user looks: on Ubuntu 26.04 (GNOME 50) the
+        # extension was missing from the list and F8, the Fn popups and the
+        # Super+P switcher all did nothing (reported by the owner 2026-11-09).
+        self.assertIn(str(TESTED_GNOME), meta["shell-version"])
         with open(os.path.join(EXTENSION, "extension.js")) as f:
             self.assertTrue(re.search(r"^export default class", f.read(), re.M))
 

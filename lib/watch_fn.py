@@ -26,7 +26,7 @@ This daemon closes the loop:
       split-screen   -> `duo theme toggle` (F8_DARK_MODE=1), else `duo swap-screens`
                         as Windows does (bare F8)
       myasus         -> `duo gui --toggle`, the duo window (bare F12)
-  - marks F7, which arrives as an ordinary Super+P typed in one report, so
+  - marks F7, an ordinary Super+P typed within 30 ms (a hand takes longer), so
     the Super+P shortcut (`duo super-p`) opens the terminal for F7 and GNOME's
     display switcher for a Super+P typed by hand (lib/hotkeys.py)
   - honors ~/.config/zenduo/fn-map.json (from `duo fn-map`) as overrides, so
@@ -76,7 +76,7 @@ DEFAULT_ACTIONS = {
     0x7E: "emoji",
     # Measured 2026-10-30 with `duo fn-probe`: three bare F8 presses sent
     # `5a 9c` then `5a 00` each, and nothing else. Bare F7 sends no vendor
-    # report at all, only a typed Super+P in one report, which ChordWatch
+    # report at all, only a typed Super+P, faster than a hand, which ChordWatch
     # tells from a hand-typed one (lib/hotkeys.py).
     0x9C: "split-screen",
     # Bare F12 carries the MyASUS legend. 0x86 is the code mainline hid-asus
