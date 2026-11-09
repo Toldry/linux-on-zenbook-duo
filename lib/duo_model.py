@@ -84,7 +84,7 @@ FEATURES = [
     Feature("palm-rejection", "libinput quirk so disable-while-typing covers the detachable touchpad", scope="system", flag="palm-rejection"),
     Feature("amp-check", "notify when the CS35L41 speaker amps fail to power up", scope="system", flag="amp-check"),
     Feature("separate-fan", "fan mode (Fn+F) and GNOME's Power Mode are separate settings, as on Windows", scope="system", flag="separate-fan"),
-    Feature("power-follows-ac", "Power Mode follows the charger; optional power-off after a while on battery", scope="system", flag="power-follows-ac"),
+    Feature("power-follows-ac", "Power Mode follows the charger; optional power-off when left asleep on battery", scope="system", flag="power-follows-ac"),
 ]
 
 # ── the knobs, as the screen edits them ──────────────────────────────────────

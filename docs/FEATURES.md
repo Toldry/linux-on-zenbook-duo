@@ -62,7 +62,7 @@ What the machine does under Windows, whether it does it here, and how.
 | Keyboard backlight goes dark when idle on Bluetooth, so the keyboard battery lasts days | `watch-fn` idle-off (`KB_BACKLIGHT_IDLE_OFF`, 30 s) | ✅ goes dark, measured 2026-10-30; battery life unmeasured |
 | Power mode set separately for plugged in and on battery | `--power-follows-ac`: `zenduo-power`, started by a udev rule on every charger change and after resume, sets power-profiles-daemon's profile (`AC_PROFILE`, `BATTERY_PROFILE` in `/etc/zenduo/power.conf`); a profile picked by hand lasts until the next plug or unplug | 🧪 2026-11-09, tests only; the Duo's charger as a `Mains` supply **VERIFY-ON-HW** |
 | Sleep after idle on battery | GNOME's own Settings > Power > Automatic Suspend (`sleep-inactive-battery-timeout`) | ✅ GNOME |
-| Power off after a while on battery (no Windows default; the owner's ask) | `--battery-shutdown MIN`: a wall-clock systemd timer with `WakeSystem=true`, so it fires from suspend too; a notification 5 min before; plugging in cancels it | 🧪 2026-11-09, tests only; RTC wake from s2idle **VERIFY-ON-HW** |
+| Hibernate after a while asleep on battery (Windows' "hibernate after") | `--battery-shutdown MIN`: power-off instead. Going to sleep on battery arms a wall-clock systemd timer with `WakeSystem=true`; waking early cancels it, so it never cuts off a laptop in use; a charger plugged in meanwhile keeps it on | 🧪 2026-11-09, tests only; RTC wake from s2idle **VERIFY-ON-HW** |
 | Hibernate | — (Ubuntu's kernel refuses it under Secure Boot; the power-off above stands in) | ✖ |
 
 ## Everything else

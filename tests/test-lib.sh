@@ -236,20 +236,21 @@ is "the rtkit drop-in is a [Service] section" "$(grep -c '^\[Service\]$' config/
 
 # ── zenduo-power, extracted from the script that installs it ────────────────
 # A fake /sys/class/power_supply and stubs for every command with an effect,
-# each of which records how it was called. The power-off has to be set on wall
-# time (OnCalendar), never OnActiveSec: that clock stops while suspended.
+# each of which records how it was called. The power-off is armed only when the
+# laptop goes to sleep on battery, on wall time (OnCalendar, never OnActiveSec:
+# that clock stops while asleep), and waking early cancels it.
 group "zenduo-power"
 pw_dir="$(mktemp -d)"
-mkdir -p "$pw_dir/bin" "$pw_dir/sys"
+mkdir -p "$pw_dir/bin" "$pw_dir/sys" "$pw_dir/run"
 sed -n "/^cat > \"\$tmp_script\" <<'POWER'\$/,/^POWER\$/p" system/58-power-follows-ac.sh | sed '1d;$d' > "$pw_dir/zenduo-power"
 chmod +x "$pw_dir/zenduo-power"
 is "the decider was extracted" "$(grep -c '^OFF_UNIT=' "$pw_dir/zenduo-power")" 1
-for stub in powerprofilesctl systemd-run; do
+for stub in powerprofilesctl systemd-run systemctl; do
   printf '#!/usr/bin/env bash\necho "%s $*" >> "%s/calls"\n' "$stub" "$pw_dir" > "$pw_dir/bin/$stub"
 done
-# systemctl: is-active answers from a file that stop removes; all is recorded.
-# shellcheck disable=SC2016  # the $1 and $* belong to the stub
-printf '#!/usr/bin/env bash\nif [ "$1" = is-active ]; then [ -e "%s/timer-active" ]; exit; fi\n[ "$1" = stop ] && rm -f "%s/timer-active"\necho "systemctl $*" >> "%s/calls"\n' "$pw_dir" "$pw_dir" "$pw_dir" > "$pw_dir/bin/systemctl"
+# date: the real one, except that `date +%s` answers $FAKE_NOW when it is set.
+# shellcheck disable=SC2016  # the $1 and $@ belong to the stub
+printf '#!/usr/bin/env bash\nif [ "$1" = +%%s ] && [ -n "${FAKE_NOW:-}" ]; then echo "$FAKE_NOW"; exit; fi\nexec %s "$@"\n' "$(command -v date)" > "$pw_dir/bin/date"
 chmod +x "$pw_dir/bin/"*
 supply() { # <name> <type> <attr=value>...
   local d="$pw_dir/sys/$1" kv
@@ -258,11 +259,11 @@ supply() { # <name> <type> <attr=value>...
   shift 2
   for kv in "$@"; do echo "${kv#*=}" > "$d/${kv%%=*}"; done
 }
-pw_conf() { printf 'AC_PROFILE=performance\nBATTERY_PROFILE=power-saver\nSHUTDOWN_AFTER_MIN=%s\n' "$1" > "$pw_dir/power.conf"; }
+pw_conf() { printf 'AC_PROFILE=performance\nBATTERY_PROFILE=power-saver\nSHUTDOWN_AFTER_SLEEP_MIN=%s\n' "$1" > "$pw_dir/power.conf"; }
 pw() { # run zenduo-power; prints the calls it made
   : > "$pw_dir/calls"
   ( PATH="$pw_dir/bin:$PATH" ZENDUO_POWER_CONF="$pw_dir/power.conf" ZENDUO_POWER_SUPPLY_DIR="$pw_dir/sys" \
-    ZENDUO_POWER_STATE="$pw_dir/state" ZENDUO_POWER_SELF=/x/zenduo-power "$pw_dir/zenduo-power" "$@" >/dev/null 2>&1 )
+    ZENDUO_POWER_RUN_DIR="$pw_dir/run" ZENDUO_POWER_SELF=/x/zenduo-power "$pw_dir/zenduo-power" "$@" >/dev/null 2>&1 )
   cat "$pw_dir/calls"
 }
 calls_match() { out_matches "$1" "${@:2}"; }
@@ -273,46 +274,51 @@ supply BAT0 Battery status=Not\ charging scope=System
 supply hid-kbd-battery Battery status=Discharging scope=Device
 c="$(pw)"
 succeeds "on the charger at the charge limit: Performance"      calls_match "$c" -x 'powerprofilesctl set performance'
-succeeds "on the charger: any pending power-off is cancelled"   calls_match "$c" -x 'systemctl stop zenduo-battery-poweroff.timer'
 fails    "a keyboard's discharging battery is not the laptop's" calls_match "$c" 'power-saver'
 is "the same source again does nothing" "$(pw)" ""
+fails    "asleep on the charger: no power-off"                  calls_match "$(pw --sleeping)" 'systemd-run'
 
 echo 0 > "$pw_dir/sys/AC0/online"; echo Discharging > "$pw_dir/sys/BAT0/status"
 c="$(pw)"
 succeeds "unplugged: Power Saver"                               calls_match "$c" -x 'powerprofilesctl set power-saver'
-succeeds "unplugged: a power-off timer that wakes the laptop"   calls_match "$c" -E '^systemd-run .*--unit=zenduo-battery-poweroff .*WakeSystem=true .*systemctl poweroff$'
-succeeds "the power-off is set on wall time, in UTC"            calls_match "$c" -E -- '--on-calendar=[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9:]{8} UTC .*poweroff$'
-fails    "never a monotonic timer (it stops while suspended)"   calls_match "$c" -e '--on-active' -e 'OnActiveSec'
-succeeds "and a warning five minutes before"                    calls_match "$c" -E '^systemd-run .*--unit=zenduo-battery-poweroff-warn .*/x/zenduo-power --warn 5$'
-deadline="$(sed -nE 's/.*--unit=zenduo-battery-poweroff --.*--on-calendar=([^U]*) UTC.*/\1/p' <<<"$c")"
-left=$(( $(date -u -d "$deadline UTC" +%s) - $(date +%s) ))
+fails    "unplugged and awake: no power-off, however long"      calls_match "$c" 'systemd-run'
+
+c="$(pw --sleeping)"
+succeeds "asleep on battery: a power-off that wakes the laptop" calls_match "$c" -E '^systemd-run .*--unit=zenduo-sleep-poweroff .*WakeSystem=true /x/zenduo-power --deadline$'
+succeeds "the power-off is set on wall time, in UTC"            calls_match "$c" -E -- '--on-calendar=[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9:]{8} UTC '
+fails    "never a monotonic timer (it stops while asleep)"      calls_match "$c" -e '--on-active' -e 'OnActiveSec'
+deadline="$(cat "$pw_dir/run/poweroff-at")"
+left=$(( deadline - $(date +%s) ))
 succeeds "the power-off is 60 minutes away" test "$left" -ge 3590 -a "$left" -le 3600
 
-touch "$pw_dir/timer-active"
-fails "a second unplug event keeps the pending power-off"       calls_match "$(rm -f "$pw_dir/state"; pw)" 'systemd-run'
-touch "$pw_dir/timer-active"
+c="$(FAKE_NOW=$((deadline - 600)) pw --resumed)"
+succeeds "woken 10 minutes early: the power-off is cancelled"   calls_match "$c" -x 'systemctl stop zenduo-sleep-poweroff.timer'
+fails    "and the laptop stays on"                              calls_match "$c" -x 'systemctl poweroff'
+is "and nothing is left armed" "$(cat "$pw_dir/run/poweroff-at" 2>/dev/null)" ""
+
+pw --sleeping >/dev/null
+deadline="$(cat "$pw_dir/run/poweroff-at")"
+succeeds "woken by the RTC at the deadline: powers off"        calls_match "$(FAKE_NOW="$deadline" pw --resumed)" -x 'systemctl poweroff'
+succeeds "the timer itself firing on battery: powers off"      calls_match "$(pw --deadline)" -x 'systemctl poweroff'
+echo 1 > "$pw_dir/sys/AC0/online"
+fails    "the timer firing with the charger plugged in meanwhile: stays on" calls_match "$(pw --deadline)" 'poweroff'
+echo 0 > "$pw_dir/sys/AC0/online"
+
 c="$(pw --reset)"
 succeeds "--reset acts on an unchanged source"                  calls_match "$c" -x 'powerprofilesctl set power-saver'
-succeeds "--reset replaces the pending power-off"               calls_match "$c" -E '^systemd-run .*zenduo-battery-poweroff '
-rm -f "$pw_dir/timer-active"
 
 echo Charging > "$pw_dir/sys/BAT0/status"
 succeeds "a charging battery is on the charger, whatever Mains says" calls_match "$(pw)" -x 'powerprofilesctl set performance'
 
-rm -rf "$pw_dir/sys/AC0"; echo Discharging > "$pw_dir/sys/BAT0/status"; rm -f "$pw_dir/state"
+rm -rf "$pw_dir/sys/AC0"; echo Discharging > "$pw_dir/sys/BAT0/status"
+succeeds "no Mains supply: a discharging battery is on battery" calls_match "$(pw)" -x 'powerprofilesctl set power-saver'
 pw_conf 0
-c="$(pw)"
-succeeds "no Mains supply: a discharging battery is on battery" calls_match "$c" -x 'powerprofilesctl set power-saver'
-fails    "SHUTDOWN_AFTER_MIN=0 schedules nothing"               calls_match "$c" 'systemd-run'
-pw_conf 3; rm -f "$pw_dir/state"
-c="$(pw)"
-succeeds "a 3-minute power-off is scheduled"                    calls_match "$c" -E 'zenduo-battery-poweroff .*poweroff$'
-fails    "with no warning (shorter than the warning)"           calls_match "$c" -E '^systemd-run .*poweroff-warn'
-printf 'AC_PROFILE=performance\nBATTERY_PROFILE=turbo; rm -rf /\nSHUTDOWN_AFTER_MIN=abc\n' > "$pw_dir/power.conf"; rm -f "$pw_dir/state"
-c="$(pw)"
+fails    "SHUTDOWN_AFTER_SLEEP_MIN=0 arms nothing"              calls_match "$(pw --sleeping)" 'systemd-run'
+printf 'AC_PROFILE=performance\nBATTERY_PROFILE=turbo; rm -rf /\nSHUTDOWN_AFTER_SLEEP_MIN=abc\n' > "$pw_dir/power.conf"
+c="$(pw --reset)"
 fails    "a bad profile is not passed on"                       calls_match "$c" 'powerprofilesctl'
-fails    "a bad minute count schedules nothing"                 calls_match "$c" 'systemd-run'
-rm -rf "$pw_dir/sys/"*; rm -f "$pw_dir/state"
+fails    "a bad minute count arms nothing"                      calls_match "$(pw --sleeping)" 'systemd-run'
+rm -rf "$pw_dir/sys/"* "$pw_dir/run/"*
 is "no supplies at all: nothing is done" "$(pw)" ""
 is "an unknown verb is a usage error" "$( (ZENDUO_POWER_SUPPLY_DIR="$pw_dir/sys" "$pw_dir/zenduo-power" --bogus >/dev/null 2>&1); echo $?)" 2
 rm -rf "$pw_dir"

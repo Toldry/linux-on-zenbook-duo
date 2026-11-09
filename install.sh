@@ -22,8 +22,8 @@
 #   --no-separate-fan      let GNOME's Power Mode change the fan mode (and vice versa)
 #   --power-follows-ac     Performance on the charger, Power Saver on battery
 #                          (/etc/zenduo/power.conf; kept until --no-power-follows-ac)
-#   --battery-shutdown MIN also power off after MIN minutes on battery, waking from
-#                          suspend if need be (0 = never; implies --power-follows-ac)
+#   --battery-shutdown MIN also power off a laptop left asleep on battery for MIN
+#                          minutes (0 = never; implies --power-follows-ac)
 #   --no-watch-displays    don't run the dock policy daemon
 #   --no-watch-fn          don't run the keyboard hotkey daemon
 #   --watch-backlight      also run the bottom-panel backlight sync daemon

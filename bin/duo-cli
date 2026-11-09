@@ -940,7 +940,7 @@ feature_desc() {
     palm-rejection) echo "libinput quirk so disable-while-typing covers the detachable touchpad" ;;
     amp-check)      echo "notify when the CS35L41 speaker amps fail to power up" ;;
     separate-fan)   echo "fan mode (Fn+F) and GNOME's Power Mode are separate settings, as on Windows" ;;
-    power-follows-ac) echo "Power Mode follows the charger; optional power-off after a while on battery" ;;
+    power-follows-ac) echo "Power Mode follows the charger; optional power-off when left asleep on battery" ;;
     *) echo "" ;;
   esac
 }

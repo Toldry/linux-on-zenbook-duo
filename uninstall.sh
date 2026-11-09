@@ -140,10 +140,12 @@ system_half() {
     systemctl try-restart power-profiles-daemon.service || true
   fi
   if [ -e /etc/systemd/system/zenduo-power.service ] || [ -e /usr/local/sbin/zenduo-power ]; then
-    systemctl stop zenduo-battery-poweroff.timer zenduo-battery-poweroff-warn.timer >/dev/null 2>&1 || true
-    systemctl disable zenduo-power.service >/dev/null 2>&1 || true
-    rm -f /etc/systemd/system/zenduo-power.service /usr/local/sbin/zenduo-power \
-      /etc/udev/rules.d/71-zenduo-power.rules /etc/zenduo/power.conf /run/zenduo/power-source
+    systemctl stop zenduo-sleep-poweroff.timer >/dev/null 2>&1 || true
+    systemctl disable zenduo-power.service zenduo-power-sleep.service zenduo-power-resume.service >/dev/null 2>&1 || true
+    rm -f /etc/systemd/system/zenduo-power.service /etc/systemd/system/zenduo-power-sleep.service \
+      /etc/systemd/system/zenduo-power-resume.service /usr/local/sbin/zenduo-power \
+      /etc/udev/rules.d/71-zenduo-power.rules /etc/zenduo/power.conf \
+      /run/zenduo/power-source /run/zenduo/poweroff-at
     rmdir /etc/zenduo 2>/dev/null || true
     systemctl daemon-reload || true
     udevadm control --reload || true
