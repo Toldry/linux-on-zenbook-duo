@@ -117,6 +117,10 @@ CARDS = (
     Card("power", "Fan Profile",
          "How hard the fans work. Fn+F steps through the same three modes.",
          "weather-windy-symbolic", "fan-mode"),
+    Card("power", "Power Mode",
+         "GNOME's Power Mode switches by itself when you plug in or unplug. A mode you "
+         "pick by hand lasts until the next plug or unplug.",
+         "power-profile-balanced-symbolic", "power-modes"),
     Card("power", "Battery Care Mode",
          "Stops charging at 80 %, which makes the battery last longer. Off charges "
          "to 100 %.",
@@ -126,9 +130,10 @@ CARDS = (
          "battery-full-charging-symbolic",
          why="Not done yet: switch Battery Care off for now and on again afterwards."),
     Card("power", "Sleep Assistant",
-         "Switches to hibernation when standby drains the battery too fast.",
-         "weather-clear-night-symbolic",
-         why="Needs hibernation, which this setup does not use."),
+         "Powers the laptop off once it has been asleep on battery for a while, so a "
+         "forgotten laptop does not drain flat. Waking it first cancels this. (MyASUS "
+         "hibernates instead, which Ubuntu does not allow under Secure Boot.)",
+         "weather-clear-night-symbolic", "sleep-poweroff"),
     Card("power", "Memory Allocated to GPU",
          "How much memory the integrated graphics keep for themselves.",
          "applications-graphics-symbolic",
@@ -197,6 +202,37 @@ SYSTEM_UPDATE = (
     "MyASUS updates the BIOS and the keyboard's firmware.",
     "This project never writes firmware from Linux. Use MyASUS on Windows, "
     "or EZ Flash in the BIOS setup.")
+
+# The Power Mode card's choices: (power-profiles-daemon profile, title).
+# "" leaves the mode as it is, as power.conf's empty value does.
+POWER_MODES = (("performance", "Performance"), ("balanced", "Balanced"),
+               ("power-saver", "Power Saver"), ("", "Leave as it is"))
+
+# The Sleep Assistant card's choices, in minutes asleep on battery; 0 = never.
+SLEEP_POWEROFF_MINUTES = (0, 15, 30, 60, 120, 240, 480)
+
+POWER_NOT_INSTALLED = "Turn on with: sudo ./install.sh --system --power-follows-ac"
+
+
+def power_mode_index(profile):
+    """The POWER_MODES row of a power.conf profile."""
+    return next((i for i, (value, _t) in enumerate(POWER_MODES) if value == profile),
+                len(POWER_MODES) - 1)
+
+
+def sleep_poweroff_choices(current):
+    """SLEEP_POWEROFF_MINUTES, plus a value hand-written into power.conf."""
+    return tuple(sorted(set(SLEEP_POWEROFF_MINUTES) | {current}))
+
+
+def sleep_poweroff_label(minutes):
+    if minutes == 0:
+        return "Never"
+    if minutes % 60 == 0:
+        hours = minutes // 60
+        return f"After {hours} hour" + ("" if hours == 1 else "s") + " asleep"
+    return f"After {minutes} minutes asleep"
+
 
 FAN_MODES = (("standard", "Standard", "balanced", "Balanced noise and speed."),
              ("whisper", "Whisper", "quiet", "Quiet fans, lower speed."),
@@ -870,6 +906,24 @@ def make_app(Adw, Gio, GLib, Gtk, Pango):
                 self.fan_buttons = self.radio_rows(
                     group, [(key, title, desc) for key, title, _v, desc in FAN_MODES],
                     lambda key: None if self.syncing else self.act(self.model.fan_profile, key))
+            elif how == "power-modes":
+                self.power_rows = {}
+                for key, title in (("ac", "On the charger"), ("battery", "On battery")):
+                    row = Adw.ComboRow(title=title, model=Gtk.StringList.new(
+                        [t for _v, t in POWER_MODES]))
+                    row.add_prefix(icon("ac-adapter-symbolic" if key == "ac"
+                                        else "battery-symbolic"))
+                    row.connect("notify::selected", self.on_power_mode, key)
+                    self.power_rows[key] = row
+                    group.add(row)
+            elif how == "sleep-poweroff":
+                self.poweroff_choices = sleep_poweroff_choices(0)
+                row = Adw.ComboRow(title="Power off", model=Gtk.StringList.new(
+                    [sleep_poweroff_label(m) for m in self.poweroff_choices]))
+                row.add_prefix(icon(card.icon))
+                row.connect("notify::selected", self.on_poweroff_minutes)
+                self.poweroff_row = row
+                group.add(row)
             elif how == "fn-key":
                 self.fn_buttons = self.radio_rows(
                     group, FN_KEYS,
@@ -916,6 +970,46 @@ def make_app(Adw, Gio, GLib, Gtk, Pango):
             fn = self.model.enable if row.get_active() else self.model.disable
             self.act(fn, name, feature=name)
 
+        def set_power(self, **change):
+            p = dict(self.model.glance.power or {})
+            if not p:
+                return
+            p.update(change)
+            self.act(self.model.set_power, p["ac"], p["battery"], p["minutes"],
+                     feature="power")
+
+        def on_power_mode(self, row, _pspec, key):
+            if self.syncing:
+                return
+            self.set_power(**{key: POWER_MODES[row.get_selected()][0]})
+
+        def on_poweroff_minutes(self, row, _pspec):
+            if self.syncing:
+                return
+            self.set_power(minutes=self.poweroff_choices[row.get_selected()])
+
+        def sync_power(self):
+            p = self.model.glance.power
+            if "power" in self.busy:
+                return
+            for key, row in getattr(self, "power_rows", {}).items():
+                row.set_sensitive(p is not None)
+                row.set_subtitle("" if p is not None else POWER_NOT_INSTALLED)
+                if p is not None:
+                    row.set_selected(power_mode_index(p[key]))
+            row = getattr(self, "poweroff_row", None)
+            if row is None:
+                return
+            row.set_sensitive(p is not None)
+            row.set_subtitle("" if p is not None else POWER_NOT_INSTALLED)
+            if p is None:
+                return
+            choices = sleep_poweroff_choices(p["minutes"])
+            if choices != self.poweroff_choices:
+                self.poweroff_choices = choices
+                row.set_model(Gtk.StringList.new([sleep_poweroff_label(m) for m in choices]))
+            row.set_selected(choices.index(p["minutes"]))
+
         def on_kb_level(self, button, level):
             if self.syncing or not button.get_active():
                 return
@@ -934,6 +1028,7 @@ def make_app(Adw, Gio, GLib, Gtk, Pango):
             for name, row in getattr(self, "card_features", {}).items():
                 if name not in self.busy and name == "speaker-dsp":
                     row.set_active(g.dsp_installed)
+            self.sync_power()
 
         # ── Screens ───────────────────────────────────────────────────────────
 
@@ -1237,7 +1332,7 @@ def make_app(Adw, Gio, GLib, Gtk, Pango):
                     text, level = feature_state(unit)
                     on = bool(unit and unit.enabled)
                     if f.scope == "system" and unit is None:
-                        text, level = "", "off"
+                        text, level = dm.system_feature_state(f.name)
                 label.set_text(text)
                 for css in LEVEL_CSS.values():
                     label.remove_css_class(css)
