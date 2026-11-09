@@ -28,7 +28,7 @@ This daemon closes the loop:
       myasus         -> `duo gui --toggle`, the duo window (bare F12)
   - marks F7, an ordinary Super+P typed within 30 ms (a hand takes longer), so
     the Super+P shortcut (`duo super-p`) opens the terminal for F7 and GNOME's
-    display switcher for a Super+P typed by hand (lib/hotkeys.py)
+    nothing for a Super+P typed by hand (lib/hotkeys.py)
   - honors ~/.config/zenduo/fn-map.json (from `duo fn-map`) as overrides, so
     newly-captured codes map onto actions without touching this file
   - on Bluetooth, darkens the keyboard backlight after KB_BACKLIGHT_IDLE_OFF
@@ -606,7 +606,7 @@ def main():
                 continue
             is_vendor = len(data) >= 2 and data[0] == VENDOR_REPORT_ID
             if chords.is_f7(fds.get(fd), data):
-                hotkeys.mark_f7()  # `duo super-p` reads it: terminal, not the switcher
+                hotkeys.mark_f7()  # `duo super-p` reads it: terminal for F7 only
             if counts_as_typing(data, actions) and idle.key(time.monotonic()):
                 dispatcher.wake_backlight()
                 if is_vendor and actions.get(data[1]) == "kbd-backlight":
