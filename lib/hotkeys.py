@@ -258,9 +258,10 @@ def super_p(duo_cli=DUO, take=take_f7_mark, call=shell_ext.call, runner=subproce
         return 0
     # No extension (or one from before this method): step the layouts, which
     # is what a quick Super+P does in GNOME too.
-    print("super-p: no display switcher from the Shell extension "
-          f"({out.strip().splitlines()[-1] if out.strip() else '?'}); "
-          "stepping the layout instead", file=sys.stderr)
+    reason = (shell_ext.NOT_RUNNING if shell_ext.not_running(out)
+              else out.strip().splitlines()[-1] if out.strip() else "?")
+    print(f"super-p: no display switcher: {reason}; stepping the layout instead",
+          file=sys.stderr)
     return runner([duo_cli, "layout", "cycle"]).returncode
 
 
