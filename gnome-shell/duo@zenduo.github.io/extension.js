@@ -4,6 +4,9 @@
 // SwapScreens: swap the windows of the two built-in panels, what F8 does
 // under Windows (reported by the owner, 2026-10-31). Under Wayland only the
 // compositor can move another program's window.
+// ShowDisplaySwitcher: GNOME's own Super+P popup. Super+P is bound to
+// `duo super-p` instead, so F7 (which types Super+P) can open a terminal;
+// a Super+P typed by hand comes back here (lib/hotkeys.py).
 // ShowOsd: the popup GNOME shows for volume and brightness, for the keys
 // MyASUS answers with one (Fn+Esc, Fn+F). org.gnome.Shell.ShowOSD would do,
 // but GNOME has refused it to other programs since 41.
@@ -12,6 +15,7 @@
 //     --object-path /io/github/zenduo/Shell \
 //     --method io.github.zenduo.Shell.ShowOsd input-keyboard-symbolic 'Fn lock on'
 
+import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import Meta from 'gi://Meta';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
@@ -24,6 +28,7 @@ const INTERFACE = `
     <method name="SwapScreens">
       <arg type="u" direction="out" name="moved"/>
     </method>
+    <method name="ShowDisplaySwitcher"/>
     <method name="ShowOsd">
       <arg type="s" direction="in" name="icon"/>
       <arg type="s" direction="in" name="label"/>
@@ -87,6 +92,19 @@ function showOsd(iconName, label) {
         osd.show(-1, icon, label, null, null);
 }
 
+// What Mutter's switch-monitor binding runs, read from gnome-shell's
+// js/ui/windowManager.js (_startSwitcher) and js/ui/switchMonitor.js on
+// 2026-10-31. The Super mask makes it behave as from the key: it stays up
+// while Super is held and applies the choice when Super is let go (at once,
+// if Super is already up). Imported when called, so a Shell without the
+// module still loads the rest of the extension.
+async function showDisplaySwitcher() {
+    const SwitchMonitor = await import('resource:///org/gnome/shell/ui/switchMonitor.js');
+    const popup = new SwitchMonitor.SwitchMonitorPopup();
+    if (!popup.show(false, 'switch-monitor', Clutter.ModifierType.MOD4_MASK))
+        popup.destroy();
+}
+
 export default class DuoExtension extends Extension {
     enable() {
         this._service = Gio.DBusExportedObject.wrapJSObject(INTERFACE, this);
@@ -100,6 +118,10 @@ export default class DuoExtension extends Extension {
 
     SwapScreens() {
         return swapWindows();
+    }
+
+    ShowDisplaySwitcher() {
+        showDisplaySwitcher().catch(error => logError(error, 'zenduo: display switcher'));
     }
 
     ShowOsd(icon, label) {

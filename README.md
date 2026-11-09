@@ -127,7 +127,7 @@ Knobs live in `~/.config/zenduo/zenduo.conf` ([annotated example](config/zenduo.
 | `DOCK_POLICY` | `1` | `0` keeps `watch-displays` running but makes it watch without acting |
 | `REMEMBER_LAYOUT` | `1` | Remember the display layout per set of connected monitors and let GNOME restore it (see below) |
 | `LOGIN_SCREEN_LAYOUT` | `1` | Give the GDM greeter the same layouts, so the password prompt is on the monitor you were using |
-| `F7_TERMINAL` | `1` | F7 (which types Super+P) opens a terminal instead of GNOME's display switcher |
+| `F7_TERMINAL` | `1` | F7 (which types Super+P) opens a terminal instead of GNOME's display switcher; a Super+P typed by hand still opens the switcher |
 | `F8_DARK_MODE` | `1` | F8 toggles dark mode; `0` swaps the windows between the panels, as under Windows (`duo swap-screens`, a GNOME Shell extension) |
 | `F12_GUI` | `1` | F12 (the MyASUS key) opens the duo window, and closes it when it is focused |
 

@@ -35,7 +35,7 @@ class Hotkeys(unittest.TestCase):
         self.assertTrue(hk.apply(store, DUO))
         self.assertEqual(store.get(hk.MUTTER, "switch-monitor"), ["XF86Display"])
         self.assertEqual(store.get(hk.MEDIA, "custom-keybindings"), [MINE, hk.F7_PATH])
-        self.assertEqual(store.get(hk.CUSTOM, "command"), f"{DUO} terminal")
+        self.assertEqual(store.get(hk.CUSTOM, "command"), f"{DUO} super-p")
         self.assertEqual(store.get(hk.CUSTOM, "binding"), "<Super>p")
         self.assertIn(DUO, hk.show(store))
 
@@ -88,3 +88,97 @@ class Hotkeys(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ChordWatch(unittest.TestCase):
+    """F7 types Super and P in one report; a hand types Super first."""
+
+    F7 = bytes([0x02, 0x08, 0x00, 0x13, 0, 0, 0, 0])
+    SUPER = bytes([0x02, 0x08, 0x00, 0x00, 0, 0, 0, 0])
+    RELEASED = bytes([0x02, 0x00, 0x00, 0x00, 0, 0, 0, 0])
+
+    def test_f7_is_one_report(self):
+        chords = hk.ChordWatch()
+        self.assertTrue(chords.is_f7("/dev/hidraw1", self.F7))
+        self.assertFalse(chords.is_f7("/dev/hidraw1", self.RELEASED))
+        self.assertTrue(chords.is_f7("/dev/hidraw1", self.F7))   # pressed again
+
+    def test_a_typed_super_p_is_not_f7(self):
+        chords = hk.ChordWatch()
+        self.assertFalse(chords.is_f7("/dev/hidraw1", self.SUPER))
+        self.assertFalse(chords.is_f7("/dev/hidraw1", self.F7))
+
+    def test_nodes_and_report_ids_are_tracked_apart(self):
+        chords = hk.ChordWatch()
+        chords.is_f7("/dev/hidraw1", self.SUPER)
+        self.assertTrue(chords.is_f7("/dev/hidraw2", self.F7))
+
+    def test_other_reports_are_ignored(self):
+        chords = hk.ChordWatch()
+        self.assertFalse(chords.is_f7("n", bytes([0x5A, 0x08, 0x00, 0x13])))  # vendor
+        self.assertFalse(chords.is_f7("n", bytes([0x02, 0x08, 0x01, 0x13])))  # not a key report
+        self.assertFalse(chords.is_f7("n", bytes([0x02, 0x08])))              # too short
+        self.assertFalse(chords.is_f7("n", bytes([0x02, 0x02, 0x00, 0x13])))  # Shift+P
+
+
+class Mark(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self.path = os.path.join(self.dir.name, "zenduo", hk.MARK_FILE)
+
+    def test_a_fresh_mark_is_taken_once(self):
+        hk.mark_f7(now=100.0, path=self.path)
+        self.assertTrue(hk.take_f7_mark(self.path, wait=0, clock=lambda: 100.2))
+        self.assertFalse(hk.take_f7_mark(self.path, wait=0, clock=lambda: 100.3))
+
+    def test_a_stale_mark_does_not_count(self):
+        hk.mark_f7(now=100.0, path=self.path)
+        self.assertFalse(hk.take_f7_mark(self.path, wait=0, clock=lambda: 105.0))
+
+    def test_it_waits_for_a_late_mark(self):
+        now = [100.0]
+
+        def sleep(seconds):
+            now[0] += seconds
+            if now[0] >= 100.1:
+                hk.mark_f7(now=100.05, path=self.path)
+        self.assertTrue(hk.take_f7_mark(self.path, wait=0.25, clock=lambda: now[0],
+                                        sleep=sleep))
+
+    def test_no_mark_gives_up(self):
+        now = [100.0]
+
+        def sleep(seconds):
+            now[0] += seconds
+        self.assertFalse(hk.take_f7_mark(self.path, wait=0.25, clock=lambda: now[0],
+                                         sleep=sleep))
+
+
+class SuperP(unittest.TestCase):
+    class Done:
+        returncode = 0
+
+    def run_super_p(self, f7, shell_rc=0):
+        ran, called = [], []
+
+        def runner(argv):
+            ran.append(argv)
+            return self.Done()
+
+        def call(method):
+            called.append(method)
+            return shell_rc, "" if shell_rc == 0 else "UnknownMethod"
+        hk.super_p(DUO, take=lambda: f7, call=call, runner=runner)
+        return ran, called
+
+    def test_f7_opens_the_terminal(self):
+        self.assertEqual(self.run_super_p(True), ([[DUO, "terminal"]], []))
+
+    def test_a_typed_super_p_opens_the_switcher(self):
+        self.assertEqual(self.run_super_p(False), ([], ["ShowDisplaySwitcher"]))
+
+    def test_without_the_extension_it_steps_the_layout(self):
+        ran, _called = self.run_super_p(False, shell_rc=1)
+        self.assertEqual(ran, [[DUO, "layout", "cycle"]])
