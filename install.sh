@@ -72,7 +72,9 @@ while [ $# -gt 0 ]; do
     --hwe-kernel|--no-hwe-kernel|--psr-fix|--no-psr-fix|--palm-rejection|--no-palm-rejection|--amp-check|--no-amp-check|--separate-fan|--no-separate-fan|--power-follows-ac|--no-power-follows-ac)
                          SYSTEM_FLAGS+=("$1") ;;
     --battery-shutdown)  [ $# -ge 2 ] || die "--battery-shutdown needs minutes (0-1440)"
-                         [[ "$2" =~ ^[0-9]+$ ]] && [ "$2" -le 1440 ] || die "--battery-shutdown must be 0-1440 minutes"
+                         if ! [[ "$2" =~ ^[0-9]+$ ]] || [ "$2" -gt 1440 ]; then
+                           die "--battery-shutdown must be 0-1440 minutes"
+                         fi
                          SYSTEM_FLAGS+=(--battery-shutdown "$2"); shift ;;
     --watch-displays)    WATCH_DISPLAYS=1; USER_FLAGS+=("$1") ;;
     --no-watch-displays) WATCH_DISPLAYS=0; USER_FLAGS+=("$1") ;;
