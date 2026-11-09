@@ -177,6 +177,9 @@ is "no verb is a usage error (64)"              "$(helper_rc ./helper/zenduo-hel
 is "an unknown verb is a usage error"           "$(helper_rc ./helper/zenduo-helper bogus)" 64
 is "backlight with no device is a usage error"  "$(helper_rc ./helper/zenduo-helper backlight)" 64
 is "batlimit out of range is a usage error"     "$(helper_rc ./helper/zenduo-helper batlimit 5)" 64
+is "power with an unknown profile is a usage error" "$(helper_rc ./helper/zenduo-helper power turbo none 60)" 64
+is "power with minutes out of range is a usage error" "$(helper_rc ./helper/zenduo-helper power performance power-saver 1441)" 64
+is "power with a missing value is a usage error"   "$(helper_rc ./helper/zenduo-helper power performance power-saver)" 64
 is "login-layout outside sudo is refused"       "$(helper_rc ./helper/zenduo-helper login-layout)" 64
 is "login-layout rejects a non-numeric uid"     "$(SUDO_UID=nobody ./helper/zenduo-helper login-layout >/dev/null 2>&1; echo $?)" 64
 # 4294967295 is (uid_t)-1: getent never resolves it, on any machine.
