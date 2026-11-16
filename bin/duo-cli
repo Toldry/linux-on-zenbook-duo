@@ -117,6 +117,8 @@ usage: duo-cli <command>        (duo <command> runs the same thing)
   brightness up|down     step both panels' backlight like GNOME's slider (what
                          the brightness keys do on GNOME 49+)
   brightness match       set the bottom panel to the top panel's level
+  brightness check       make sure each panel's slider drives that panel (Mutter
+                         can tie the bottom one to the top panel's backlight)
   sync-backlight [src [dst]]   copy panel backlight percentage src -> dst
   watch-backlight [src [dst]]  daemon: keep dst backlight synced to src
   theme [show|dark|light|toggle]

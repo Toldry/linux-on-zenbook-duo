@@ -72,6 +72,38 @@ class ProxyResubscribeTest(unittest.TestCase):
                 w.push_login_screen()
                 self.assertEqual(len(calls), 2, "a reinstalled helper is tried again")
 
+    def test_the_bottom_panel_coming_on_gets_its_slider_checked(self):
+        # Mutter can tie eDP-2's slider to the top panel's backlight while
+        # the panel is switching on, whoever switched it on (user report,
+        # 2026-11-16, external monitor). Off -> on matches the level too;
+        # already on at the daemon's start only checks; staying on is quiet.
+        w = watch_displays.Watcher()
+        verbs = []
+        with mock.patch.object(w, "sync_bottom_backlight",
+                               lambda match=True: verbs.append(match)):
+            w.note_bottom_panel(True)    # lit when the daemon started
+            w.note_bottom_panel(True)    # still lit
+            w.note_bottom_panel(False)   # docked
+            w.note_bottom_panel(False)
+            w.note_bottom_panel(True)    # undocked, or a monitor plugged in
+        self.assertEqual(verbs, [False, True])
+
+    def test_check_has_no_sysfs_fallback_and_match_keeps_it(self):
+        scripts = []
+
+        class FakeProc:
+            def poll(self):
+                return 0
+        w = watch_displays.Watcher()
+        with mock.patch.object(watch_displays.subprocess, "Popen",
+                               lambda argv, **k: (scripts.append(argv[2]), FakeProc())[1]):
+            w.sync_bottom_backlight(match=False)
+            w.sync_bottom_backlight(match=True)
+        self.assertIn("brightness check", scripts[0])
+        self.assertNotIn("sync-backlight", scripts[0])
+        self.assertIn("brightness match", scripts[1])
+        self.assertIn("sync-backlight", scripts[1])
+
     def test_touch_is_pinned_once_per_start_and_never_by_once(self):
         # GNOME's own guess puts both touchscreens on the top panel; the daemon
         # writes the mapping on the first state Mutter answers with, and

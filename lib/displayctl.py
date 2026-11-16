@@ -18,6 +18,8 @@ Commands:
     brightness up|down step both panels' backlight one GNOME slider step
     brightness match   set the bottom panel to the top panel's level
                        through Mutter (GNOME 49+, where gsd-power no longer does it)
+    brightness check   make sure each panel's slider reaches that panel's own
+                       backlight, and make Mutter look again if it does not
 
 Safety invariant (docs/DESIGN.md, R10): any configuration that would leave ZERO
 enabled panels is refused with exit code 2.
@@ -40,7 +42,9 @@ Exit codes: 0 ok · 1 D-Bus/environment failure · 2 refused by invariant ·
 
 import json
 import os
+import re
 import sys
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import dock  # noqa: E402  (same directory; shares dock state + override marker)
@@ -731,9 +735,7 @@ def brightness_targets(lights, up=None):
     def fraction(light):
         return (light["value"] - light["min"]) / (light["max"] - light["min"])
 
-    usable = {light["connector"]: light for light in lights
-              if light.get("connector") in (TOP, BOTTOM) and "value" in light
-              and light.get("active", True) and light["max"] > light["min"]}
+    usable = {light["connector"]: light for light in _active_panels(lights)}
     if TOP not in usable:
         return {}
     step = 0.0 if up is None else 1.0 / BRIGHTNESS_STEPS
@@ -741,6 +743,140 @@ def brightness_targets(lights, up=None):
     target = min(1.0, max(0.0, target))
     return {connector: round(light["min"] + target * (light["max"] - light["min"]))
             for connector, light in usable.items()}
+
+
+# Where the kernel lists backlight devices. A module constant so the tests can
+# point it at a fake tree.
+SYS_BACKLIGHT = "/sys/class/backlight"
+# How long a panel's own device may lag what Mutter reports before the two are
+# called different: Mutter reads sysfs again on the udev change event.
+BINDING_SETTLE_SECONDS = 1.0
+
+
+def _read_int(path):
+    try:
+        with open(path) as f:
+            return int(f.read().strip())
+    except (OSError, ValueError):
+        return None
+
+
+def native_backlight(connector, root=None):
+    """The backlight device the kernel registered for `connector`, or None.
+
+    Mutter's own rule for a match (meta_udev_backlight_find_for_connector in
+    src/backends/meta-udev.c, gnome-50 branch, read 2026-11-16): type "raw",
+    and the parent is the DRM connector named card<N>-<connector>. On this
+    laptop that is intel_backlight for eDP-1 and card1-eDP-2-backlight for
+    eDP-2 (docs/HARDWARE.md).
+    """
+    root = root or SYS_BACKLIGHT
+    try:
+        names = sorted(os.listdir(root))
+    except OSError:
+        return None
+    parent_name = re.compile(r"card\d+-" + re.escape(connector))
+    for name in names:
+        device = os.path.join(root, name)
+        try:
+            with open(os.path.join(device, "type")) as f:
+                kind = f.read().strip()
+        except OSError:
+            continue
+        parent = os.path.basename(os.path.dirname(os.path.realpath(device)))
+        if kind == "raw" and parent_name.fullmatch(parent):
+            return device
+    return None
+
+
+def backlight_mismatch(light, level, max_brightness):
+    """True when Mutter's backlight for a panel is not that panel's device.
+
+    `light` is the panel's entry in Mutter's Backlight property; `level` and
+    `max_brightness` are read from the panel's own sysfs device. Mutter
+    takes its max straight from the device it drives and its value from that
+    device's brightness, clamped to [min, max] (meta-backlight-sysfs.c,
+    gnome-50, read 2026-11-16), so either differing means it drives another.
+
+    Why it happens: Mutter binds every monitor's backlight again on each
+    monitor change, and only finds eDP-2's own device if the kernel already
+    calls the connector enabled. A panel that is still being switched on is
+    not, and an internal panel then falls back to the first raw device:
+    intel_backlight, the top panel's. Its slider then moves the top panel
+    and the bottom one stays put (user report with an external monitor,
+    2026-11-16). The maxima differ on this laptop (400 against 255, measured
+    2026-10-19), so the max alone gives it away.
+    """
+    if level is None or max_brightness is None:
+        return False  # nothing to compare against
+    if light["max"] != max_brightness:
+        return True
+    return light["value"] != min(light["max"], max(light["min"], level))
+
+
+def _active_panels(lights):
+    return [light for light in lights
+            if light.get("connector") in (TOP, BOTTOM) and "value" in light
+            and light.get("active", True) and light["max"] > light["min"]]
+
+
+def _read_backlights(bus):
+    try:
+        reply = bus.call_sync(
+            BUS_NAME, OBJ_PATH, "org.freedesktop.DBus.Properties", "Get",
+            GLib.Variant("(ss)", (BUS_NAME, "Backlight")), GLib.VariantType("(v)"),
+            Gio.DBusCallFlags.NONE, -1, None)
+        return reply.unpack()[0]
+    except GLib.Error as e:
+        raise DisplayCtlError(f"cannot read Mutter's Backlight property: {e.message}", 1)
+
+
+def misbound_panels(bus, root=None, sleep=time.sleep):
+    """Connectors whose slider Mutter has tied to another panel's device."""
+    deadline = time.monotonic() + BINDING_SETTLE_SECONDS
+    while True:
+        _serial, lights = _read_backlights(bus)
+        wrong = []
+        for light in _active_panels(lights):
+            device = native_backlight(light["connector"], root)
+            if device is None:
+                continue
+            if backlight_mismatch(light,
+                                  _read_int(os.path.join(device, "brightness")),
+                                  _read_int(os.path.join(device, "max_brightness"))):
+                wrong.append(light["connector"])
+        if not wrong or time.monotonic() >= deadline:
+            return wrong
+        sleep(0.1)
+
+
+def current_logicals(monitors, logical_monitors):
+    """The layout on screen now, in ApplyMonitorsConfig's shape, unchanged."""
+    return [(x, y, scale, transform, primary,
+             [(connector, pick_mode(monitors[connector])["id"], {})
+              for (connector, *_spec) in assigned])
+            for (x, y, scale, transform, primary, assigned, _props) in logical_monitors]
+
+
+def ensure_backlights_bound(bus):
+    """Re-apply the current layout if Mutter drives a panel's slider elsewhere.
+
+    Re-applying changes nothing on screen, but Mutter binds the backlights
+    again while every panel is already lit, and then finds each one's own.
+    """
+    wrong = misbound_panels(bus)
+    if not wrong:
+        return
+    print(f"displayctl: Mutter's slider for {', '.join(wrong)} is not driving that "
+          f"panel's own backlight — re-applying the current layout so it looks again",
+          file=sys.stderr)
+    p = proxy()
+    serial, monitors_raw, logical_raw, _properties = get_state(p)
+    apply_config(p, serial, current_logicals(parse_monitors(monitors_raw), logical_raw))
+    wrong = misbound_panels(bus)
+    if wrong:
+        raise DisplayCtlError(f"Mutter still drives the slider for {', '.join(wrong)} "
+                              f"into another panel's backlight", 1)
 
 
 def cmd_brightness(args):
@@ -752,26 +888,29 @@ def cmd_brightness(args):
     Mutter directly. GNOME Shell sees the change, moves its slider and shows
     its OSD (backlights-changed in js/misc/brightnessManager.js) -- VERIFY-ON-HW.
     """
-    if args not in (["up"], ["down"], ["match"]):
+    if args not in (["up"], ["down"], ["match"], ["check"]):
         print(__doc__, file=sys.stderr)
         return 64
     _require_gi()
     try:
         bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
-        reply = bus.call_sync(
-            BUS_NAME, OBJ_PATH, "org.freedesktop.DBus.Properties", "Get",
-            GLib.Variant("(ss)", (BUS_NAME, "Backlight")), GLib.VariantType("(v)"),
-            Gio.DBusCallFlags.NONE, -1, None)
-        serial, lights = reply.unpack()[0]
     except GLib.Error as e:
-        raise DisplayCtlError(f"cannot read Mutter's Backlight property: {e.message}", 1)
-    targets = brightness_targets(lights, up={"up": True, "down": False}.get(args[0]))
-    if not targets:
-        raise DisplayCtlError(f"Mutter has no controllable backlight on {TOP}", 1)
-    if args == ["match"] and BOTTOM not in targets:
+        raise DisplayCtlError(f"cannot reach the session bus: {e.message}", 1)
+    if args[0] in ("match", "check"):
+        # Both run when the bottom panel has just come on, which is exactly
+        # when Mutter may have tied its slider to the top panel's device.
+        ensure_backlights_bound(bus)
+    serial, lights = _read_backlights(bus)
+    if args[0] in ("match", "check") and BOTTOM not in {
+            light["connector"] for light in _active_panels(lights)}:
         # Just switched on, Mutter may not list it as active yet: fail so
         # the caller can retry or fall back.
         raise DisplayCtlError(f"Mutter has no active backlight on {BOTTOM} yet", 1)
+    if args[0] == "check":
+        return 0
+    targets = brightness_targets(lights, up={"up": True, "down": False}.get(args[0]))
+    if not targets:
+        raise DisplayCtlError(f"Mutter has no controllable backlight on {TOP}", 1)
     for connector, value in targets.items():
         try:
             bus.call_sync(BUS_NAME, OBJ_PATH, BUS_NAME, "SetBacklight",
