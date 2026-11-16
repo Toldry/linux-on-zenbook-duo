@@ -155,6 +155,7 @@ class Watcher:
         self._announced_mirror = False
         self._announced_policy_off = False
         self._pending_undock = False  # an undock edge still owing the bottom panel
+        self._bottom_lit = None  # was eDP-2 on at the last converge (None: not seen)
         self._topology = None   # the set of connected monitors, as a config key
         self._restore_pending = True   # check the remembered layout once per set
         self._record_timer = 0
@@ -197,7 +198,7 @@ class Watcher:
 
     # ── wake-up sources ──────────────────────────────────────────────────────
 
-    def sync_bottom_backlight(self):
+    def sync_bottom_backlight(self, match=True):
         """Match the bottom panel's brightness to the top panel's.
 
         The bottom panel comes back at whatever level it was last left at —
@@ -214,16 +215,40 @@ class Watcher:
         400 -> 340 and 308 -> 262 after three key presses. A freshly enabled
         panel may not be active in Mutter for a moment, hence one retry; the
         sysfs copy is the fallback for a GNOME without Mutter backlights.
+
+        Both `match` and `check` first make sure Mutter drives the bottom
+        panel's slider into the bottom panel's own backlight: Mutter binds
+        it while the panel is still switching on and can fall back to the
+        top panel's device (user report, 2026-11-16, external monitor
+        connected; `duo layout extend` re-applying the same layout fixed it).
+        `match=False` is for a panel that was already lit when the daemon
+        started: check the binding, leave its level alone.
         """
-        script = ('"$0" brightness match || { sleep 1; "$0" brightness match; } '
-                  '|| "$0" sync-backlight')
+        verb = "match" if match else "check"
+        script = f'"$0" brightness {verb} || {{ sleep 1; "$0" brightness {verb}; }}'
+        if match:
+            script += ' || "$0" sync-backlight'
         try:
             self._children.append(subprocess.Popen(
                 ["sh", "-c", script, DUO], stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL, start_new_session=True))
-            log("bottom panel enabled — matching its backlight to the top panel")
+            log("bottom panel enabled — matching its backlight to the top panel"
+                if match else "bottom panel lit — checking its brightness slider")
         except OSError as e:
             log(f"could not start the backlight sync: {e}")
+
+    def note_bottom_panel(self, lit):
+        """Check the bottom panel's brightness whenever it comes on.
+
+        Whoever switched it on: this daemon on undock, the remembered layout
+        after a monitor is plugged in, `duo both`, GNOME Settings. Each is a
+        moment Mutter can tie its slider to the top panel's backlight. Off to
+        on also matches its level to the top panel's; already on when the
+        daemon starts (a login) only checks, so a level the user chose stays.
+        """
+        if lit and self._bottom_lit is not True:
+            self.sync_bottom_backlight(match=self._bottom_lit is False)
+        self._bottom_lit = lit
 
     def schedule_record(self):
         """(Re)start the settle timer that records the layout on screen."""
@@ -471,6 +496,7 @@ class Watcher:
         monitors = displayctl.parse_monitors(monitors_raw)
         enabled = displayctl.enabled_connectors(logical_raw)
         self.maybe_pin_touch(monitors)
+        self.note_bottom_panel(displayctl.BOTTOM in enabled)
 
         # Which monitors are connected is the key to the layout memory, and a
         # change of it is as much "the situation changed" as a dock or undock:
@@ -588,8 +614,6 @@ class Watcher:
         self._applies.append(time.monotonic())
         log(f"{reason}: [{', '.join(displayctl.order_connectors(enabled)) or 'none'}]"
             f" -> [{', '.join(want)}]")
-        if displayctl.BOTTOM in want and not bottom_on:
-            self.sync_bottom_backlight()
         return 0
 
     def maybe_pin_touch(self, monitors):

@@ -422,6 +422,104 @@ class BrightnessStep(unittest.TestCase):
         self.assertEqual(displayctl.run(["brightness", "sideways"]), 64)
 
 
+class BacklightBinding(unittest.TestCase):
+    """Is Mutter's slider for a panel driving that panel's own device?"""
+
+    @staticmethod
+    def light(connector, value, high, low=None):
+        return {"connector": connector, "active": True,
+                "min": max(1, high // 100) if low is None else low,
+                "max": high, "value": value}
+
+    def make_tree(self, root):
+        """/sys/class/backlight as on the laptop (docs/HARDWARE.md)."""
+        devices = os.path.join(root, "devices")
+        layout = {
+            "card1/card1-eDP-1/intel_backlight": ("raw", 400, 300),
+            "card1/card1-eDP-2/card1-eDP-2-backlight": ("raw", 255, 40),
+            "asus-nb-wmi/asus_screenpad": ("raw", 255, 255),
+        }
+        klass = os.path.join(root, "class")
+        os.makedirs(klass)
+        for path, (kind, high, level) in layout.items():
+            device = os.path.join(devices, path)
+            os.makedirs(device)
+            for name, value in (("type", kind), ("max_brightness", high),
+                                ("brightness", level)):
+                with open(os.path.join(device, name), "w") as f:
+                    f.write(f"{value}\n")
+            os.symlink(device, os.path.join(klass, os.path.basename(path)))
+        return klass
+
+    def test_each_panel_finds_its_own_device_like_mutter_does(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            klass = self.make_tree(d)
+            self.assertEqual(os.path.basename(displayctl.native_backlight(TOP, klass)),
+                             "intel_backlight")
+            self.assertEqual(os.path.basename(displayctl.native_backlight(BOTTOM, klass)),
+                             "card1-eDP-2-backlight")
+            self.assertIsNone(displayctl.native_backlight("HDMI-1", klass))
+            # a prefix of the connector name is not a match
+            self.assertIsNone(displayctl.native_backlight("eDP", klass))
+
+    def test_no_backlight_directory_is_no_device(self):
+        self.assertIsNone(displayctl.native_backlight(BOTTOM, "/nonexistent/backlight"))
+
+    def test_bottom_slider_on_the_top_panels_device_is_caught_by_its_max(self):
+        # Mutter's fallback for a panel still switching on: the first raw
+        # device, intel_backlight (max 400), where eDP-2's own has max 255.
+        misbound = self.light(BOTTOM, 300, high=400)
+        self.assertTrue(displayctl.backlight_mismatch(misbound, 40, 255))
+        self.assertTrue(displayctl.backlight_mismatch(misbound, 300, 255),
+                        "even when the levels happen to agree")
+
+    def test_a_correctly_bound_panel_passes(self):
+        self.assertFalse(displayctl.backlight_mismatch(self.light(BOTTOM, 40, 255), 40, 255))
+
+    def test_the_same_max_still_shows_by_level(self):
+        self.assertTrue(displayctl.backlight_mismatch(self.light(BOTTOM, 300, 400), 40, 400))
+
+    def test_mutter_clamps_a_level_below_its_minimum(self):
+        # sysfs 0 reads as Mutter's min (max/100), which is not a mismatch.
+        self.assertFalse(displayctl.backlight_mismatch(self.light(TOP, 4, 400), 0, 400))
+
+    def test_an_unreadable_device_is_not_a_mismatch(self):
+        self.assertFalse(displayctl.backlight_mismatch(self.light(TOP, 4, 400), None, 400))
+
+    def test_misbound_panels_reads_mutter_against_sysfs(self):
+        import tempfile
+        lights = [self.light(TOP, 300, high=400),
+                  self.light(BOTTOM, 300, high=400),  # on intel_backlight
+                  self.light("HDMI-1", 50, high=100)]
+        with tempfile.TemporaryDirectory() as d:
+            klass = self.make_tree(d)
+            with mock.patch.object(displayctl, "_read_backlights",
+                                   return_value=(7, lights)), \
+                 mock.patch.object(displayctl, "BINDING_SETTLE_SECONDS", 0):
+                self.assertEqual(displayctl.misbound_panels(None, klass), [BOTTOM])
+            lights[1] = self.light(BOTTOM, 40, high=255)
+            with mock.patch.object(displayctl, "_read_backlights",
+                                   return_value=(8, lights)):
+                self.assertEqual(displayctl.misbound_panels(None, klass), [])
+
+    def test_current_layout_is_replayed_exactly(self):
+        monitors = {TOP: mon(TOP), BOTTOM: mon(BOTTOM), "HDMI-1": mon("HDMI-1", 1920, 1080)}
+        live = [logical(0, 0, 2.0, [TOP]), logical(0, 900, 2.0, [BOTTOM]),
+                logical(1440, 0, 1.0, ["HDMI-1"], primary=True)]
+        self.assertEqual(displayctl.current_logicals(monitors, live), [
+            (0, 0, 2.0, 0, False, [(TOP, "2880x1800@120", {})]),
+            (0, 900, 2.0, 0, False, [(BOTTOM, "2880x1800@120", {})]),
+            (1440, 0, 1.0, 0, True, [("HDMI-1", "1920x1080@120", {})]),
+        ])
+
+    def test_a_mirrored_layout_stays_mirrored(self):
+        monitors = {TOP: mon(TOP), "HDMI-1": mon("HDMI-1")}
+        live = [logical(0, 0, 1.0, [TOP, "HDMI-1"], primary=True)]
+        (only,) = displayctl.current_logicals(monitors, live)
+        self.assertEqual([c for (c, _m, _p) in only[5]], [TOP, "HDMI-1"])
+
+
 class Recordable(unittest.TestCase):
     """What gets remembered while docked. Docked and undocked are one monitor
     set to Mutter, so recording the policy's "bottom panel off" overwrote the
