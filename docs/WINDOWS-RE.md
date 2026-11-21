@@ -59,11 +59,17 @@ mostly to find which device id and which value, or which bytes.
   `docs/HARDWARE.md` as "measured (date), Windows capture". Delete the
   matching **VERIFY-ON-HW**, and attach the session folder to an issue or a
   PR. `windows/captures/` is git-ignored.
-- Legal: decompiling ASUS binaries probably breaks the MyASUS EULA. Watching
-  what your own machine sends to its own hardware is a different activity,
-  and that is all this kit does. Interoperability exceptions exist in some
-  jurisdictions (for example EU Directive 2009/24/EC, Art. 6), but this is
-  not legal advice.
+- Legal: ASUS's general software EULA covers "the ASUS software and firmware
+  provided in or with an ASUS product" and says "You shall not modify,
+  compile, reverse engineer, decompile decrypt or disassemble the Software
+  ... except to the extent directly applicable law prohibits enforcement of
+  the foregoing" (read 2026-10-31 at
+  https://livechat.asus.com/plugin/static/ASUS_EULA_20251023.pdf). MyASUS's
+  own terms are shown in the app (About → Terms of Use Notice) and were not
+  read here. Watching what your own machine sends to its own hardware is
+  not decompiling, and that is all this kit does. Interoperability
+  exceptions exist in some jurisdictions (for example EU Directive
+  2009/24/EC, Art. 6), but this is not legal advice.
 
 ## Setup (Windows, once)
 
