@@ -382,8 +382,8 @@ class KeyboardBattery(unittest.TestCase):
                 mock.patch.object(b, "keyboard_sysfs", return_value=None), \
                 mock.patch.object(b, "keyboard_upower", return_value=None):
             alarm = b.LowAlarm()
-            self.assertEqual(watch_fn.check_kb_battery(alarm, notify), 10)
-            self.assertIsNone(watch_fn.check_kb_battery(alarm, notify))
+            self.assertEqual(watch_fn.check_kb_battery(alarm, notify, lambda: False), 10)
+            self.assertIsNone(watch_fn.check_kb_battery(alarm, notify, lambda: False))
         self.assertEqual(shown, [(9, "report")])
 
     def test_no_popup_while_the_kernel_says_it_charges(self):
@@ -392,4 +392,42 @@ class KeyboardBattery(unittest.TestCase):
         with mock.patch.object(b, "load_status", return_value=None), \
                 mock.patch.object(b, "keyboard_sysfs", return_value=(4, "charging")), \
                 mock.patch.object(b, "keyboard_upower", return_value=None):
-            self.assertIsNone(watch_fn.check_kb_battery(b.LowAlarm(), lambda *_: True))
+            self.assertIsNone(watch_fn.check_kb_battery(b.LowAlarm(), lambda *_: True,
+                                                        lambda: False))
+
+    def run_reports(self, reports, docked=False):
+        """Feed 5a 3d reports one by one; the levels that popped up."""
+        from unittest import mock
+        b = watch_fn.battery
+        alarm, shown = b.LowAlarm(), []
+        with mock.patch.object(b, "keyboard_sysfs", return_value=None), \
+                mock.patch.object(b, "keyboard_upower", return_value=None):
+            for pct, charge in reports:
+                report = (bytes([0x5A, 0x3D, pct, charge]), 0)
+                with mock.patch.object(b, "load_status", return_value=report):
+                    level = watch_fn.check_kb_battery(
+                        alarm, lambda *_: True, lambda: docked)
+                    if level is not None:
+                        shown.append(level)
+        return shown
+
+    def test_no_popup_while_docked(self):
+        self.assertEqual(self.run_reports([(9, 0), (5, 0)], docked=True), [])
+
+    def test_no_popup_while_the_report_says_it_charges(self):
+        self.assertEqual(self.run_reports([(5, 9), (6, 9), (6, 9)]), [])
+
+    def test_a_falling_level_warns_even_if_the_report_says_charging(self):
+        # The report's charging byte is a guess: a drop overrides it.
+        self.assertEqual(self.run_reports([(12, 9), (9, 9)]), [10])
+
+    def test_unplugged_after_charging_warns(self):
+        self.assertEqual(self.run_reports([(4, 9), (5, 9), (5, 0)]), [5])
+
+    def test_kb_charging(self):
+        charging = watch_fn.kb_charging
+        self.assertTrue(charging("", "report", True, 3, 4))
+        self.assertTrue(charging("charging", "kernel", False, 3, 4))
+        self.assertFalse(charging("not charging", "kernel", False, 3, None))
+        self.assertTrue(charging("charging", "report", False, 3, None))
+        self.assertFalse(charging("charging", "report", False, 3, 4))

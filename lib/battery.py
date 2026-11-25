@@ -263,6 +263,7 @@ class LowAlarm:
     def __init__(self, levels=LOW_LEVELS):
         self.levels = sorted(levels, reverse=True)
         self.warned = set()
+        self.last_pct = None   # the previous reading, kept by watch_fn.check_kb_battery
 
     def update(self, pct):
         for level in list(self.warned):

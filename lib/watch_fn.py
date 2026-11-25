@@ -477,18 +477,38 @@ def slept_since(last):
 BATTERY_CHECK_SECONDS = 60
 
 
-def check_kb_battery(alarm, notify=battery.notify):
-    """Pop up a warning when the keyboard battery drops through a low level.
+def kb_charging(state, source, docked, pct, last_pct):
+    """Whether the keyboard is charging, as far as anything can tell.
 
-    Not while the kernel or UPower says it is charging; the 5a 3d report's
-    charging state is only a guess, so it never silences a warning.
+    - On the pogo pins it charges from the laptop: it read `5a 3d 64 00`
+      (100 %) docked under Windows (docs/HARDWARE.md), and the owner sees
+      the low-battery popup "while charging". That docking always charges,
+      and whether a cable to the laptop enumerates it on USB too, is
+      **VERIFY-ON-HW**.
+    - The kernel's or UPower's state, when they have one.
+    - The 5a 3d report's state is a guess (battery.status_charging), so it
+      counts only while the level is not falling: if the guess is wrong, a
+      draining battery still warns one reading later.
     """
+    if docked:
+        return True
+    if state != "charging":
+        return False
+    if source != "report":
+        return True
+    return last_pct is None or pct >= last_pct
+
+
+def check_kb_battery(alarm, notify=battery.notify, docked=dock.keyboard_docked):
+    """Pop up a warning when the keyboard battery drops through a low level,
+    never while it charges (kb_charging)."""
     reading = battery.keyboard_reading(battery.load_status(), battery.keyboard_sysfs(),
                                        battery.keyboard_upower())
     if reading is None:
         return None
     pct, state, source = reading
-    if state == "charging" and source != "report":
+    last_pct, alarm.last_pct = alarm.last_pct, pct
+    if kb_charging(state, source, docked(), pct, last_pct):
         return None
     level = alarm.update(pct)
     if level is not None:
