@@ -100,7 +100,7 @@ class KeyboardText(unittest.TestCase):
         text = battery.keyboard_text(True, None, None, self.report, now=1000 + 180)
         self.assertTrue(text.startswith("99 %, not charging"))
         self.assertIn("3 min ago", text)
-        self.assertIn("unconfirmed", text)
+        self.assertNotIn("unconfirmed", text)
 
     def test_nothing_yet(self):
         self.assertTrue(battery.keyboard_text(True).startswith("unknown"))

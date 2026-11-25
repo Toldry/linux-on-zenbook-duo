@@ -183,8 +183,11 @@ The process doing all of it is `AsusOptimization.exe`.
   they are 5 and 6 % with the fourth byte 09, most likely "charging". A
   btmon capture (2026-11-25) settled the third byte: it matched the
   keyboard's standard GATT Battery Level (0x2a19) at every step from 38
-  to 43 %, while the fourth byte stayed 09 (charging, about 75 %;
-  **VERIFY-ON-HW** that a cable was in).
+  to 43 %, while the fourth byte stayed 09 with a cable in (the owner,
+  2026-11-25): 09 is "charging". The same capture shows the keyboard offers
+  the standard Battery Service (0x180f), and that BlueZ connects it at a
+  7.5 ms interval with peripheral latency 2, the values stored in its
+  `[ConnectionParameters]`.
 - **Memory Allocated to GPU does not work from MyASUS on this unit.** Set
   from "Automatic" to 8 GB, then to 1 GB, each time confirmed with MyASUS's
   "Reboot now": after the restart it read "Automatic" again both times.

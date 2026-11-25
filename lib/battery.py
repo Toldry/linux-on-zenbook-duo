@@ -11,8 +11,9 @@ The keyboard has three possible sources, tried in this order:
    this keyboard declares one is **VERIFY-ON-HW**; none was in the
    2026-09-05 report.
 2. UPower, which also carries what BlueZ reads from a Bluetooth LE battery
-   service. Whether the keyboard offers one over Bluetooth is
-   **VERIFY-ON-HW**.
+   service. The keyboard offers one over Bluetooth (measured 2026-11-25:
+   0000180f is in BlueZ's Services for it, and btmon showed Battery Level
+   0x2a19 read and notified); whether UPower lists it is **VERIFY-ON-HW**.
 3. The keyboard's own status report `5a 3d XX YY`, which watch-fn saves as
    it arrives (`save_status`). XX is the battery percentage: in a btmon
    capture (2026-11-25) it matched the keyboard's GATT Battery Level
@@ -20,8 +21,9 @@ The keyboard has three possible sources, tried in this order:
    said 99 %, and `5a 3d 64 00` docked (docs/HARDWARE.md, 2026-10-31).
    On Linux it came as `5a 3d 05 09` and `5a 3d 06 09` (2026-10-30), which
    is 5 and 6 %. YY was 09 throughout that rise and the 38 -> 43 % one,
-   so 09 very likely means "charging" (status_charging). The window still
-   says where a value came from.
+   and the owner confirmed a cable was in during the second, so 09 means
+   "charging" (status_charging). The window still says where a value came
+   from.
 
 A reading is only shown while the keyboard is reachable (on the pins or on
 Bluetooth); otherwise the answer is "unknown". watch-fn clears the saved
@@ -131,7 +133,7 @@ def load_status(path=None):
 
 
 def status_percent(data):
-    """The guessed percentage in a `5a 3d XX …` report, or None."""
+    """The percentage in a `5a 3d XX …` report, or None."""
     if len(data) >= 3 and data[0] == VENDOR_REPORT_ID and data[1] == STATUS_CODE \
             and data[2] <= 100:
         return data[2]
@@ -155,11 +157,11 @@ CHARGE_WORDS = {
 
 
 def status_charging(data):
-    """The guessed charging state in a `5a 3d XX YY` report, or "".
+    """The charging state in a `5a 3d XX YY` report, or "".
 
-    **GUESS, about 75 %**: YY is nonzero while it charges. It was 09 while
-    the level rose 05 -> 06 (2026-10-30) and 38 -> 43 % (btmon capture,
-    2026-11-25; that a cable was plugged in is **VERIFY-ON-HW**); under
+    YY is nonzero while it charges. It was 09 while the level rose 05 -> 06
+    (2026-10-30) and 38 -> 43 % (btmon capture, 2026-11-25, with a cable in:
+    confirmed by the owner the same day); under
     Windows it read `63 00` on Bluetooth and `64 00` (full) docked
     (docs/HARDWARE.md). Only 00 and 09 have been seen, so any nonzero
     value counts. watch_fn.kb_charging still lets a falling level warn.
@@ -220,7 +222,7 @@ def keyboard_reachable():
 
 def keyboard_reading(status=None, sysfs=None, upower=None):
     """(percent, charge state, source) from the best source, or None.
-    source is "kernel", "bluetooth" or "report" (the unconfirmed guess)."""
+    source is "kernel", "bluetooth" or "report" (the keyboard's 5a 3d)."""
     if sysfs is not None:
         return sysfs[0], sysfs[1], "kernel"
     if upower is not None:
@@ -245,7 +247,7 @@ def keyboard_text(reachable, sysfs=None, upower=None, status=None, now=None):
     if source == "report":
         age = max(0, int((time.time() if now is None else now) - status[1]))
         ago = "just now" if age < 60 else f"{age // 60} min ago"
-        return text + f" (keyboard's own report, {ago}; unconfirmed)"
+        return text + f" (keyboard's own report, {ago})"
     return text
 
 
