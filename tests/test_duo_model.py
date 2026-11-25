@@ -290,5 +290,56 @@ class ResultTest(unittest.TestCase):
         self.assertIn("not found", err)
 
 
+
+class SystemFeatureState(unittest.TestCase):
+    """The window showed nothing for these before 2026-11-09."""
+
+    def test_psr_fix_reads_the_kernel_command_line(self):
+        self.assertEqual(dm.system_feature_state("psr-fix", "quiet i915.enable_psr=0"), ("active", "ok"))
+        self.assertEqual(dm.system_feature_state("psr-fix", "quiet i915.enable_psr=01"), ("inactive", "off"))
+
+    def test_a_file_feature_is_installed_iff_its_file_exists(self):
+        import tempfile
+        with tempfile.NamedTemporaryFile() as present:
+            old = dict(dm.SYSTEM_FEATURE_MARKERS)
+            try:
+                dm.SYSTEM_FEATURE_MARKERS["power-follows-ac"] = present.name
+                self.assertEqual(dm.system_feature_state("power-follows-ac"), ("installed", "ok"))
+                dm.SYSTEM_FEATURE_MARKERS["power-follows-ac"] = present.name + ".absent"
+                self.assertEqual(dm.system_feature_state("power-follows-ac"), ("absent", "off"))
+            finally:
+                dm.SYSTEM_FEATURE_MARKERS.clear()
+                dm.SYSTEM_FEATURE_MARKERS.update(old)
+
+    def test_every_system_feature_without_a_unit_has_a_state(self):
+        for f in dm.FEATURES:
+            if f.scope == "system" and not f.unit:
+                self.assertNotEqual(dm.system_feature_state(f.name, "")[0], "?", f.name)
+
+
+
+class ReadPower(unittest.TestCase):
+    def conf(self, text):
+        import tempfile
+        handle = tempfile.NamedTemporaryFile("w", delete=False, suffix=".conf")
+        handle.write(text)
+        handle.close()
+        self.addCleanup(os.unlink, handle.name)
+        return handle.name
+
+    def test_not_installed_is_none(self):
+        self.assertIsNone(dm.read_power(self.conf("AC_PROFILE=balanced\n"), decider="/nonexistent"))
+
+    def test_values_as_zenduo_power_reads_them(self):
+        path = self.conf("# c\nAC_PROFILE = balanced\nBATTERY_PROFILE=\nSHUTDOWN_AFTER_SLEEP_MIN=30\n")
+        self.assertEqual(dm.read_power(path, decider=sys.executable),
+                         {"ac": "balanced", "battery": "", "minutes": 30})
+
+    def test_what_zenduo_power_ignores_reads_as_ignored(self):
+        path = self.conf("AC_PROFILE=turbo\nSHUTDOWN_AFTER_SLEEP_MIN=abc\n")
+        self.assertEqual(dm.read_power(path, decider=sys.executable),
+                         {"ac": "", "battery": "power-saver", "minutes": 0})
+
+
 if __name__ == "__main__":
     unittest.main()

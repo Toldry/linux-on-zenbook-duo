@@ -177,6 +177,9 @@ is "no verb is a usage error (64)"              "$(helper_rc ./helper/zenduo-hel
 is "an unknown verb is a usage error"           "$(helper_rc ./helper/zenduo-helper bogus)" 64
 is "backlight with no device is a usage error"  "$(helper_rc ./helper/zenduo-helper backlight)" 64
 is "batlimit out of range is a usage error"     "$(helper_rc ./helper/zenduo-helper batlimit 5)" 64
+is "power with an unknown profile is a usage error" "$(helper_rc ./helper/zenduo-helper power turbo none 60)" 64
+is "power with minutes out of range is a usage error" "$(helper_rc ./helper/zenduo-helper power performance power-saver 1441)" 64
+is "power with a missing value is a usage error"   "$(helper_rc ./helper/zenduo-helper power performance power-saver)" 64
 is "login-layout outside sudo is refused"       "$(helper_rc ./helper/zenduo-helper login-layout)" 64
 is "login-layout rejects a non-numeric uid"     "$(SUDO_UID=nobody ./helper/zenduo-helper login-layout >/dev/null 2>&1; echo $?)" 64
 # 4294967295 is (uid_t)-1: getent never resolves it, on any machine.
@@ -234,6 +237,95 @@ is "the rtkit drop-in asks rtkit before the service starts" \
    "$(grep -c '^ExecStartPre=-busctl --system --quiet --timeout=10 call org.freedesktop.RealtimeKit1 ' config/systemd/user/10-zenduo-rtkit.conf)" 1
 is "the rtkit drop-in is a [Service] section" "$(grep -c '^\[Service\]$' config/systemd/user/10-zenduo-rtkit.conf)" 1
 
+# ── zenduo-power, extracted from the script that installs it ────────────────
+# A fake /sys/class/power_supply and stubs for every command with an effect,
+# each of which records how it was called. The power-off is armed only when the
+# laptop goes to sleep on battery, on wall time (OnCalendar, never OnActiveSec:
+# that clock stops while asleep), and waking early cancels it.
+group "zenduo-power"
+pw_dir="$(mktemp -d)"
+mkdir -p "$pw_dir/bin" "$pw_dir/sys" "$pw_dir/run"
+sed -n "/^cat > \"\$tmp_script\" <<'POWER'\$/,/^POWER\$/p" system/58-power-follows-ac.sh | sed '1d;$d' > "$pw_dir/zenduo-power"
+chmod +x "$pw_dir/zenduo-power"
+is "the decider was extracted" "$(grep -c '^OFF_UNIT=' "$pw_dir/zenduo-power")" 1
+for stub in powerprofilesctl systemd-run systemctl; do
+  printf '#!/usr/bin/env bash\necho "%s $*" >> "%s/calls"\n' "$stub" "$pw_dir" > "$pw_dir/bin/$stub"
+done
+# date: the real one, except that `date +%s` answers $FAKE_NOW when it is set.
+# shellcheck disable=SC2016  # the $1 and $@ belong to the stub
+printf '#!/usr/bin/env bash\nif [ "$1" = +%%s ] && [ -n "${FAKE_NOW:-}" ]; then echo "$FAKE_NOW"; exit; fi\nexec %s "$@"\n' "$(command -v date)" > "$pw_dir/bin/date"
+chmod +x "$pw_dir/bin/"*
+supply() { # <name> <type> <attr=value>...
+  local d="$pw_dir/sys/$1" kv
+  mkdir -p "$d"
+  echo "$2" > "$d/type"
+  shift 2
+  for kv in "$@"; do echo "${kv#*=}" > "$d/${kv%%=*}"; done
+}
+pw_conf() { printf 'AC_PROFILE=performance\nBATTERY_PROFILE=power-saver\nSHUTDOWN_AFTER_SLEEP_MIN=%s\n' "$1" > "$pw_dir/power.conf"; }
+pw() { # run zenduo-power; prints the calls it made
+  : > "$pw_dir/calls"
+  ( PATH="$pw_dir/bin:$PATH" ZENDUO_POWER_CONF="$pw_dir/power.conf" ZENDUO_POWER_SUPPLY_DIR="$pw_dir/sys" \
+    ZENDUO_POWER_RUN_DIR="$pw_dir/run" ZENDUO_POWER_SELF=/x/zenduo-power "$pw_dir/zenduo-power" "$@" >/dev/null 2>&1 )
+  cat "$pw_dir/calls"
+}
+calls_match() { out_matches "$1" "${@:2}"; }
+
+pw_conf 60
+supply AC0 Mains online=1
+supply BAT0 Battery status=Not\ charging scope=System
+supply hid-kbd-battery Battery status=Discharging scope=Device
+c="$(pw)"
+succeeds "on the charger at the charge limit: Performance"      calls_match "$c" -x 'powerprofilesctl set performance'
+fails    "a keyboard's discharging battery is not the laptop's" calls_match "$c" 'power-saver'
+is "the same source again does nothing" "$(pw)" ""
+fails    "asleep on the charger: no power-off"                  calls_match "$(pw --sleeping)" 'systemd-run'
+
+echo 0 > "$pw_dir/sys/AC0/online"; echo Discharging > "$pw_dir/sys/BAT0/status"
+c="$(pw)"
+succeeds "unplugged: Power Saver"                               calls_match "$c" -x 'powerprofilesctl set power-saver'
+fails    "unplugged and awake: no power-off, however long"      calls_match "$c" 'systemd-run'
+
+c="$(pw --sleeping)"
+succeeds "asleep on battery: a power-off that wakes the laptop" calls_match "$c" -E '^systemd-run .*--unit=zenduo-sleep-poweroff .*WakeSystem=true /x/zenduo-power --deadline$'
+succeeds "the power-off is set on wall time, in UTC"            calls_match "$c" -E -- '--on-calendar=[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9:]{8} UTC '
+fails    "never a monotonic timer (it stops while asleep)"      calls_match "$c" -e '--on-active' -e 'OnActiveSec'
+deadline="$(cat "$pw_dir/run/poweroff-at")"
+left=$(( deadline - $(date +%s) ))
+succeeds "the power-off is 60 minutes away" test "$left" -ge 3590 -a "$left" -le 3600
+
+c="$(FAKE_NOW=$((deadline - 600)) pw --resumed)"
+succeeds "woken 10 minutes early: the power-off is cancelled"   calls_match "$c" -x 'systemctl stop zenduo-sleep-poweroff.timer'
+fails    "and the laptop stays on"                              calls_match "$c" -x 'systemctl poweroff'
+is "and nothing is left armed" "$(cat "$pw_dir/run/poweroff-at" 2>/dev/null)" ""
+
+pw --sleeping >/dev/null
+deadline="$(cat "$pw_dir/run/poweroff-at")"
+succeeds "woken by the RTC at the deadline: powers off"        calls_match "$(FAKE_NOW="$deadline" pw --resumed)" -x 'systemctl poweroff'
+succeeds "the timer itself firing on battery: powers off"      calls_match "$(pw --deadline)" -x 'systemctl poweroff'
+echo 1 > "$pw_dir/sys/AC0/online"
+fails    "the timer firing with the charger plugged in meanwhile: stays on" calls_match "$(pw --deadline)" 'poweroff'
+echo 0 > "$pw_dir/sys/AC0/online"
+
+c="$(pw --reset)"
+succeeds "--reset acts on an unchanged source"                  calls_match "$c" -x 'powerprofilesctl set power-saver'
+
+echo Charging > "$pw_dir/sys/BAT0/status"
+succeeds "a charging battery is on the charger, whatever Mains says" calls_match "$(pw)" -x 'powerprofilesctl set performance'
+
+rm -rf "$pw_dir/sys/AC0"; echo Discharging > "$pw_dir/sys/BAT0/status"
+succeeds "no Mains supply: a discharging battery is on battery" calls_match "$(pw)" -x 'powerprofilesctl set power-saver'
+pw_conf 0
+fails    "SHUTDOWN_AFTER_SLEEP_MIN=0 arms nothing"              calls_match "$(pw --sleeping)" 'systemd-run'
+printf 'AC_PROFILE=performance\nBATTERY_PROFILE=turbo; rm -rf /\nSHUTDOWN_AFTER_SLEEP_MIN=abc\n' > "$pw_dir/power.conf"
+c="$(pw --reset)"
+fails    "a bad profile is not passed on"                       calls_match "$c" 'powerprofilesctl'
+fails    "a bad minute count arms nothing"                      calls_match "$(pw --sleeping)" 'systemd-run'
+rm -rf "$pw_dir/sys/"* "$pw_dir/run/"*
+is "no supplies at all: nothing is done" "$(pw)" ""
+is "an unknown verb is a usage error" "$( (ZENDUO_POWER_SUPPLY_DIR="$pw_dir/sys" "$pw_dir/zenduo-power" --bogus >/dev/null 2>&1); echo $?)" 2
+rm -rf "$pw_dir"
+
 # ── install.sh: flags must survive the runuser round trip ────────────────────
 # As root, install.sh re-runs itself under runuser for the user half. Its
 # parser starts from the defaults, so the flags have to travel as arguments:
@@ -271,6 +363,9 @@ is "no flags forwards nothing"                "$(field "$(plan)" USER_FLAGS)" ""
 is "--user alone means the user half only"    "$(field "$(plan --user)" DO_SYSTEM)" 0
 is "--system alone skips the user half"       "$(field "$(plan --system)" DO_USER)" 0
 is "--no-separate-fan goes to the system half" "$(field "$(plan --no-separate-fan)" SYSTEM_FLAGS)" "--no-separate-fan"
+is "--battery-shutdown goes to the system half with its value" "$(field "$(plan --power-follows-ac --battery-shutdown 60)" SYSTEM_FLAGS)" "--power-follows-ac --battery-shutdown 60"
+fails "--battery-shutdown out of range is refused" plan --battery-shutdown 2000
+fails "--battery-shutdown needs a number"          plan --battery-shutdown soon
 fails "--battery-limit out of range is refused" plan --battery-limit 10
 fails "--apply-method never is refused"        plan --apply-method never
 fails "an unknown flag is refused"             plan --bogus
