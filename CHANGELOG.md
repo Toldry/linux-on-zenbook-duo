@@ -4,6 +4,14 @@ Every release of linux-on-zenbook-duo, newest first. CI writes this file from
 [`changelog.d/`](changelog.d/README.md) after each merge; do not edit it by
 hand. `duo version` prints the release you have.
 
+## 0.15.4 — 2026-11-25
+
+### The keyboard battery reading is no longer marked "unconfirmed"
+
+- a Bluetooth capture showed the keyboard's own report carries the same
+  percentage as its standard battery reading, and its charging flag was
+  set while a cable was plugged in, so `duo gui` and `duo` drop the word
+
 ## 0.15.3 — 2026-11-25
 
 ### The keyboard low-battery warning stays quiet while it charges
