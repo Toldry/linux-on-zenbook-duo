@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""F7 opens a terminal; a Super+P typed by hand still opens GNOME's display
-switcher.
+"""F7 opens a terminal; a Super+P typed by hand does nothing.
 
 Bare F7 does not send a key of its own: after kb-init the keyboard types a
 literal Super+P on its ordinary keyboard interface (measured 2026-10-30 with
@@ -16,11 +15,12 @@ and goes to a custom shortcut running `duo super-p`, which decides:
   nodes (ChordWatch) and leaves a mark when P follows Super within
   F7_GAP (mark_f7).
 - `duo super-p` waits briefly for that mark. Marked: `duo terminal`. Not
-  marked (typed by hand, on any keyboard): GNOME's own display switcher,
-  raised through the Shell extension, or `duo layout cycle` without it.
+  marked (typed by hand, on any keyboard): nothing, as the owner asked
+  (2026-11-09). Super+P raising GNOME's switcher through the Shell extension
+  was tried and "acts strangely"; `duo layout ...` and GNOME Settings still
+  change the layout.
 
-So without watch-fn F7 falls back to the switcher, never Super+P to the
-terminal. The gap docked (USB) is VERIFY-ON-HW; the reports there are the
+So without watch-fn F7 does nothing, and Super+P never opens the terminal. The gap docked (USB) is VERIFY-ON-HW; the reports there are the
 same bytes without the report id (captured 2026-11-09).
 
 Everything is GNOME's own settings, written through the gsettings command.
@@ -41,8 +41,6 @@ import subprocess
 import sys
 import time
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import shell_ext  # noqa: E402  (same directory; the display switcher lives in the Shell)
 
 DUO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                     "..", "bin", "duo-cli"))
@@ -53,7 +51,7 @@ MEDIA = "org.gnome.settings-daemon.plugins.media-keys"
 CUSTOM_DIR = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/"
 F7_PATH = CUSTOM_DIR + "zenduo-f7/"
 CUSTOM = f"{MEDIA}.custom-keybinding:{F7_PATH}"
-NAME = "F7 opens a terminal, Super+P the display switcher (zenduo)"
+NAME = "F7 opens a terminal (zenduo); a typed Super+P does nothing"
 # Until 2026-10-30 F7 toggled dark mode under this path; apply and remove
 # take it out, so an update does not leave two shortcuts on Super+P.
 OLD_PATHS = (CUSTOM_DIR + "zenduo-theme-toggle/",)
@@ -273,20 +271,11 @@ def take_f7_mark(path=None, wait=MARK_WAIT, clock=time.time, sleep=time.sleep):
         sleep(0.02)
 
 
-def super_p(duo_cli=DUO, take=take_f7_mark, call=shell_ext.call, runner=subprocess.run):
-    """What Super+P does: the terminal for F7, the display switcher otherwise."""
+def super_p(duo_cli=DUO, take=take_f7_mark, runner=subprocess.run):
+    """What Super+P does: the terminal for F7, nothing when typed by hand."""
     if take():
         return runner([duo_cli, "terminal"]).returncode
-    rc, out = call("ShowDisplaySwitcher")
-    if rc == 0:
-        return 0
-    # No extension (or one from before this method): step the layouts, which
-    # is what a quick Super+P does in GNOME too.
-    reason = (shell_ext.NOT_RUNNING if shell_ext.not_running(out)
-              else out.strip().splitlines()[-1] if out.strip() else "?")
-    print(f"super-p: no display switcher: {reason}; stepping the layout instead",
-          file=sys.stderr)
-    return runner([duo_cli, "layout", "cycle"]).returncode
+    return 0
 
 
 def main(argv, store=None):
@@ -300,7 +289,7 @@ def main(argv, store=None):
     try:
         if argv[0] == "apply":
             changed = apply(store, argv[1])
-            print("hotkeys: F7 opens a terminal, a typed Super+P the display switcher"
+            print("hotkeys: F7 opens a terminal, a typed Super+P does nothing"
                   + ("" if changed else " (up to date)"))
         elif argv[0] == "remove":
             remove(store)

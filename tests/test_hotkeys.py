@@ -179,25 +179,17 @@ class SuperP(unittest.TestCase):
     class Done:
         returncode = 0
 
-    def run_super_p(self, f7, shell_rc=0):
-        ran, called = [], []
+    def run_super_p(self, f7):
+        ran = []
 
         def runner(argv):
             ran.append(argv)
             return self.Done()
-
-        def call(method):
-            called.append(method)
-            return shell_rc, "" if shell_rc == 0 else "UnknownMethod"
-        hk.super_p(DUO, take=lambda: f7, call=call, runner=runner)
-        return ran, called
+        hk.super_p(DUO, take=lambda: f7, runner=runner)
+        return ran
 
     def test_f7_opens_the_terminal(self):
-        self.assertEqual(self.run_super_p(True), ([[DUO, "terminal"]], []))
+        self.assertEqual(self.run_super_p(True), [[DUO, "terminal"]])
 
-    def test_a_typed_super_p_opens_the_switcher(self):
-        self.assertEqual(self.run_super_p(False), ([], ["ShowDisplaySwitcher"]))
-
-    def test_without_the_extension_it_steps_the_layout(self):
-        ran, _called = self.run_super_p(False, shell_rc=1)
-        self.assertEqual(ran, [[DUO, "layout", "cycle"]])
+    def test_a_typed_super_p_does_nothing(self):
+        self.assertEqual(self.run_super_p(False), [])
