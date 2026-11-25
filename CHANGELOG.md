@@ -4,6 +4,15 @@ Every release of linux-on-zenbook-duo, newest first. CI writes this file from
 [`changelog.d/`](changelog.d/README.md) after each merge; do not edit it by
 hand. `duo version` prints the release you have.
 
+## 0.15.3 — 2026-11-25
+
+### The keyboard low-battery warning stays quiet while it charges
+
+- no popup while the keyboard sits on the pogo pins, which charge it
+- no popup while the keyboard's own status report says it is charging,
+  as long as the level is not falling: that report's charging flag is
+  still a guess, so a level that drops warns anyway
+
 ## 0.15.2 — 2026-11-16
 
 ### Fixes
