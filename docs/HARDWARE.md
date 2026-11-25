@@ -180,8 +180,11 @@ The process doing all of it is `AsusOptimization.exe`.
   the Bluetooth capture (read off Settings by the owner, 2026-10-31), so the
   third byte is very likely the battery percentage (0x63 = 99, 0x64 = 100):
   about 85 %. That does not explain `5a 3d 05 09` / `06 09`, seen on Linux:
-  perhaps a second kind of `3d` report told apart by the fourth byte
-  (**VERIFY-ON-HW**: compare with GNOME's battery reading when one arrives).
+  they are 5 and 6 % with the fourth byte 09, most likely "charging". A
+  btmon capture (2026-11-25) settled the third byte: it matched the
+  keyboard's standard GATT Battery Level (0x2a19) at every step from 38
+  to 43 %, while the fourth byte stayed 09 (charging, about 75 %;
+  **VERIFY-ON-HW** that a cable was in).
 - **Memory Allocated to GPU does not work from MyASUS on this unit.** Set
   from "Automatic" to 8 GB, then to 1 GB, each time confirmed with MyASUS's
   "Reboot now": after the restart it read "Automatic" again both times.

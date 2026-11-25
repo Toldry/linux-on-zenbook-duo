@@ -14,13 +14,14 @@ The keyboard has three possible sources, tried in this order:
    service. Whether the keyboard offers one over Bluetooth is
    **VERIFY-ON-HW**.
 3. The keyboard's own status report `5a 3d XX YY`, which watch-fn saves as
-   it arrives (`save_status`). **GUESS, about 85 %**: XX is the battery
-   percentage. Under Windows it came as `5a 3d 63 00` (99) when Windows
+   it arrives (`save_status`). XX is the battery percentage: in a btmon
+   capture (2026-11-25) it matched the keyboard's GATT Battery Level
+   (0x2a19) at every step from 38 to 43 %. Under Windows it came as `5a 3d 63 00` (99) when Windows
    said 99 %, and `5a 3d 64 00` docked (docs/HARDWARE.md, 2026-10-31).
    On Linux it came as `5a 3d 05 09` and `5a 3d 06 09` (2026-10-30), which
-   would be 5 and 6 %, unconfirmed; a rising value with YY set may mean
-   "charging", but that is a guess too. So the window says where a value
-   came from and that it is unconfirmed.
+   is 5 and 6 %. YY was 09 throughout that rise and the 38 -> 43 % one,
+   so 09 very likely means "charging" (status_charging). The window still
+   says where a value came from.
 
 A reading is only shown while the keyboard is reachable (on the pins or on
 Bluetooth); otherwise the answer is "unknown". watch-fn clears the saved
@@ -156,9 +157,12 @@ CHARGE_WORDS = {
 def status_charging(data):
     """The guessed charging state in a `5a 3d XX YY` report, or "".
 
-    **GUESS, about 60 %**: YY is nonzero while it charges. On Linux the
-    report rose 05 -> 06 with YY = 09 (2026-10-30); under Windows it read
-    `63 00` on Bluetooth and `64 00` (full) docked (docs/HARDWARE.md).
+    **GUESS, about 75 %**: YY is nonzero while it charges. It was 09 while
+    the level rose 05 -> 06 (2026-10-30) and 38 -> 43 % (btmon capture,
+    2026-11-25; that a cable was plugged in is **VERIFY-ON-HW**); under
+    Windows it read `63 00` on Bluetooth and `64 00` (full) docked
+    (docs/HARDWARE.md). Only 00 and 09 have been seen, so any nonzero
+    value counts. watch_fn.kb_charging still lets a falling level warn.
     """
     if status_percent(data) is None or len(data) < 4:
         return ""
