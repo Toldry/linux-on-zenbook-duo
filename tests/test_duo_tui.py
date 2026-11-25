@@ -378,7 +378,7 @@ class KeysTest(unittest.TestCase):
         calls = []
         app.model.config_set = lambda k, v: (calls.append((k, v)), dm.Result(True, f"config set {k}", f"{k}={v}"))[1]
         app.current = "Settings"
-        app.views["Settings"].cur.i = 6      # DOCK_POLICY
+        app.views["Settings"].cur.i = [k.key for k in dm.KNOBS].index("DOCK_POLICY")
         app.handle_key(ord(" "))
         self.assertEqual(calls, [("DOCK_POLICY", "0")])
         # the daemon that reads it is running, so a restart is offered

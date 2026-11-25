@@ -28,6 +28,8 @@ let
     "ZENDUO_DOCK_POLICY=${bool01 cfg.dockPolicy}"
     "ZENDUO_KB_BACKLIGHT_RESTORE=${bool01 cfg.kbBacklightRestore}"
     "ZENDUO_KB_BACKLIGHT_IDLE_OFF=${toString cfg.kbBacklightIdleOff}"
+    "ZENDUO_KB_BACKLIGHT_BT_DARK=${bool01 cfg.kbBacklightBluetoothDark}"
+    "ZENDUO_KB_BACKLIGHT_DIM_MINUTES=${toString cfg.kbBacklightDimMinutes}"
     "ZENDUO_REMEMBER_LAYOUT=${bool01 cfg.rememberLayout}"
     "ZENDUO_LOGIN_SCREEN_LAYOUT=${bool01 cfg.loginScreenLayout}"
     "ZENDUO_TOUCH_MAPPING=${bool01 cfg.touchMapping}"
@@ -62,6 +64,8 @@ let
     BACKLIGHT_TARGET=${cfg.backlightTarget}
     KB_BACKLIGHT_RESTORE=${bool01 cfg.kbBacklightRestore}
     KB_BACKLIGHT_IDLE_OFF=${toString cfg.kbBacklightIdleOff}
+    KB_BACKLIGHT_BT_DARK=${bool01 cfg.kbBacklightBluetoothDark}
+    KB_BACKLIGHT_DIM_MINUTES=${toString cfg.kbBacklightDimMinutes}
     DOCK_POLICY=${bool01 cfg.dockPolicy}
     REMEMBER_LAYOUT=${bool01 cfg.rememberLayout}
     LOGIN_SCREEN_LAYOUT=${bool01 cfg.loginScreenLayout}
@@ -256,6 +260,18 @@ in
       type = lib.types.ints.between 0 3600;
       default = 30;
       description = "Seconds without a key press before the keyboard backlight goes dark while the keyboard is on Bluetooth; the next key brings it back. 0 = never.";
+    };
+
+    kbBacklightBluetoothDark = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "On Bluetooth, start with the keyboard backlight off after every connect; F4 lights it for that connection. Docked, the remembered level comes back as before.";
+    };
+
+    kbBacklightDimMinutes = lib.mkOption {
+      type = lib.types.ints.between 0 1440;
+      default = 10;
+      description = "On Bluetooth, step the lit keyboard backlight one level dimmer every this many minutes, down to off; F4 starts the count again. 0 = never.";
     };
 
     watchBacklight = lib.mkOption {

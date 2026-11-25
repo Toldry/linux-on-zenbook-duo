@@ -38,6 +38,17 @@ KB_BACKLIGHT_RESTORE=1
 # than days. 0 = never (docked it is powered by the laptop and stays lit).
 KB_BACKLIGHT_IDLE_OFF=30
 
+# On Bluetooth, start with the keyboard light off after every connect, resume
+# and undock; F4 lights it for that connection. The light is nearly all of the
+# keyboard's battery use: measured 2026-11-25, about 29 % an hour lit against
+# about 1 % an hour dark. Docked, the remembered level comes back as before.
+# 1 = yes.
+KB_BACKLIGHT_BT_DARK=1
+
+# On Bluetooth, step the lit keyboard light one level dimmer every this many
+# minutes, down to off; F4 starts the count again. 0 = never.
+KB_BACKLIGHT_DIM_MINUTES=10
+
 # Enforce the dock policy at all (bottom panel off while the keyboard is on it,
 # back on when it comes off). 0 makes duo-watch-displays a no-op while still
 # running, which is handy for a day of experiments without disabling the unit.

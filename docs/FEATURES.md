@@ -59,7 +59,8 @@ What the machine does under Windows, whether it does it here, and how.
 | Performance / balanced / quiet profiles | `platform_profile` exists; no `duo` verb yet | 📝 phase T |
 | Standby drain comparable to Windows | s2idle; unmeasured | 📝 phase T |
 | Keyboard battery level (Windows Settings > Bluetooth) | Overview row in `duo` / `duo gui`; `watch-fn` pops up a warning at 20, 10, 5 and 1 %, not while it charges or is docked | ✅ the `5a 3d` report's level and charging flag, measured 2026-11-25 (the keyboard also has a Bluetooth battery service; whether UPower lists it is **VERIFY-ON-HW**) |
-| Keyboard backlight goes dark when idle on Bluetooth, so the keyboard battery lasts days | `watch-fn` idle-off (`KB_BACKLIGHT_IDLE_OFF`, 30 s) | ✅ goes dark, measured 2026-10-30; battery life unmeasured |
+| Keyboard backlight goes dark when idle on Bluetooth, so the keyboard battery lasts days | `watch-fn` idle-off (`KB_BACKLIGHT_IDLE_OFF`, 30 s) | ✅ goes dark, measured 2026-10-30 |
+| Keyboard battery lasts on Bluetooth (the light is nearly all of its use: about 29 %/h lit, about 1 %/h dark, measured 2026-11-25) | `watch-fn` starts each Bluetooth connection dark (`KB_BACKLIGHT_BT_DARK`) and steps a lit light one level dimmer every `KB_BACKLIGHT_DIM_MINUTES` (10) | 🧪 VERIFY-ON-HW |
 | Hibernate | — | ✖ |
 
 ## Everything else

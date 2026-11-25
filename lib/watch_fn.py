@@ -33,6 +33,8 @@ This daemon closes the loop:
     newly-captured codes map onto actions without touching this file
   - on Bluetooth, darkens the keyboard backlight after KB_BACKLIGHT_IDLE_OFF
     seconds without a key and brings it back on the next one (IdleOff)
+  - on Bluetooth, starts each connection with the backlight off and steps a
+    lit one dimmer every KB_BACKLIGHT_DIM_MINUTES (BluetoothLight)
 
 Run via the duo-watch-fn systemd user service (installed by ./install.sh, or the home-manager module)
 or by hand: `duo watch-fn`. Needs the udev uaccess rule for hidraw access.
@@ -141,6 +143,7 @@ class Dispatcher:
         self.unhandled = {}  # action -> times seen this run
         self.keys = None  # uinput_keys.VirtualKeys, made on first use
         self.keys_failed = False
+        self.bt_light = None  # BluetoothLight, set by main()
 
     def virtual_keys(self):
         """The virtual brightness keys, or None when /dev/uinput is closed to us."""
@@ -188,7 +191,18 @@ class Dispatcher:
         self.spawn([DUO, "kb-backlight", "--apply", "0"])
 
     def wake_backlight(self):
-        self.spawn([DUO, "kb-backlight", "--apply", str(kb_backlight.read_level())])
+        self.apply_backlight(self.lit_level())
+
+    def lit_level(self):
+        """The level the light has while someone types: this Bluetooth
+        connection's, or the remembered one."""
+        if self.bt_light is not None and self.bt_light.active:
+            return self.bt_light.level
+        return kb_backlight.read_level()
+
+    def apply_backlight(self, level):
+        # --apply: shown now, but the remembered level stays the user's.
+        self.spawn([DUO, "kb-backlight", "--apply", str(level)])
 
     def spawn(self, argv):
         try:
@@ -289,6 +303,12 @@ class Dispatcher:
             # re-enumerates, and an in-memory counter kept climbing from the
             # pre-dock value — so after docking at level 2 the first press went
             # to 3 instead of restoring 2.
+            if self.bt_light is not None and self.bt_light.active:
+                # Detached: this connection's level, never the remembered one,
+                # so the light docked comes back as the user left it there.
+                level = self.bt_light.pressed(time.monotonic())
+                self.spawn([DUO, "kb-backlight", "--apply", str(level)])
+                return
             nxt = (kb_backlight.read_level() + 1) % (kb_backlight.MAX_LEVEL + 1)
             self.spawn([DUO, "kb-backlight", str(nxt)])
         elif action == "second-screen":
@@ -362,7 +382,8 @@ class IdleOff:
     keyboard runs on the laptop's power, so this only acts on Bluetooth.
     Measured 2026-10-30: detached and idle, it went dark after 30 s, so the
     keyboard sends no unprompted report besides the vendor 0x3d (any other
-    one would count as typing and keep it lit). Battery life is unmeasured.
+    one would count as typing and keep it lit). Battery life: see
+    BluetoothLight, which also keeps it dark while typing unless F4 lit it.
     """
 
     def __init__(self, timeout):
@@ -391,6 +412,74 @@ class IdleOff:
             return False
         self.dark = True
         return True
+
+
+def bt_dark_enabled():
+    """KB_BACKLIGHT_BT_DARK from the environment; on unless it is 0."""
+    return os.environ.get("ZENDUO_KB_BACKLIGHT_BT_DARK", "1") != "0"
+
+
+def dim_seconds():
+    """KB_BACKLIGHT_DIM_MINUTES from the environment, in seconds; 0 = never."""
+    try:
+        return 60 * max(0, int(os.environ.get("ZENDUO_KB_BACKLIGHT_DIM_MINUTES", "10")))
+    except ValueError:
+        return 600
+
+
+class BluetoothLight:
+    """The keyboard light's level for one Bluetooth connection.
+
+    Measured 2026-11-25 (owner's upower log, detached, normal typing): about
+    29 % of the keyboard battery an hour with the light on, about 1 % an hour
+    with it off, so the light is nearly all of its consumption. The radio link
+    is no different from Windows' (7.5 ms, latency 2 on both, btmon and BTVS
+    captures the same day). So, on Bluetooth only:
+
+    - each connection starts dark (KB_BACKLIGHT_BT_DARK), and F4 cycles this
+      connection's level from there rather than the remembered one, which
+      stays the docked level;
+    - a lit light steps one level dimmer every KB_BACKLIGHT_DIM_MINUTES,
+      down to off. Typing does not restart the count; F4 does.
+
+    Docked the keyboard runs on the laptop's power and nothing here acts.
+    """
+
+    def __init__(self, start_dark, dim_after):
+        self.start_dark = start_dark
+        self.dim_after = dim_after
+        self.active = False
+        self.level = 0
+        self.dim_at = None
+
+    def connected(self, now, bluetooth, remembered):
+        """A connection began. Returns the level to show now, or None to
+        leave the light to restore_backlight() (docked, or the feature off)."""
+        self.active = bluetooth
+        if not bluetooth:
+            self.dim_at = None
+            return None
+        self.level = 0 if self.start_dark else remembered
+        self._schedule(now)
+        return self.level if self.start_dark else None
+
+    def pressed(self, now):
+        """F4 on Bluetooth: the next level, which also restarts the dimming."""
+        self.level = (self.level + 1) % (kb_backlight.MAX_LEVEL + 1)
+        self._schedule(now)
+        return self.level
+
+    def due_dim(self, now):
+        """True when the light just stepped one level dimmer (self.level)."""
+        if not self.active or self.dim_at is None or now < self.dim_at:
+            return False
+        self.level -= 1
+        self._schedule(now)
+        return True
+
+    def _schedule(self, now):
+        lit = self.level > 0 and self.dim_after > 0
+        self.dim_at = now + self.dim_after if lit else None
 
 
 def counts_as_typing(data, actions):
@@ -526,6 +615,7 @@ def main():
     actions = load_overrides()
     dispatcher = Dispatcher()
     idle = IdleOff(idle_off_seconds())
+    bt_light = dispatcher.bt_light = BluetoothLight(bt_dark_enabled(), dim_seconds())
     fds = {}
     # None = "state unknown, say what you find": the first pass and every
     # rescan after a lost node log either branch below, so a keyboard that
@@ -591,10 +681,17 @@ def main():
                     # The keyboard is back and initialised: give it its
                     # backlight back rather than leaving it dark until the
                     # user presses the key.
-                    dispatcher.restore_backlight()
+                    on_bt = any(kb_init.over_bluetooth(n) for n in nodes)
+                    start = bt_light.connected(time.monotonic(), on_bt,
+                                               kb_backlight.read_level())
+                    if start is None:
+                        dispatcher.restore_backlight()
+                    else:
+                        log(f"on Bluetooth: keyboard backlight starts at level {start} "
+                            f"(KB_BACKLIGHT_BT_DARK); F4 lights it")
+                        dispatcher.apply_backlight(start)
                     dispatcher.restore_state()
-                    idle.connected(time.monotonic(),
-                                   any(kb_init.over_bluetooth(n) for n in nodes))
+                    idle.connected(time.monotonic(), on_bt)
                 else:
                     failures += 1
                     delay = min(60, 2 ** min(failures, 6))
@@ -641,8 +738,13 @@ def main():
             battery_at = time.monotonic() + BATTERY_CHECK_SECONDS
             check_kb_battery(alarm)
         # After the reads, so a key that arrived during the select counts.
-        if idle.due(time.monotonic(), kb_backlight.read_level):
+        if idle.due(time.monotonic(), dispatcher.lit_level):
             dispatcher.darken_backlight()
+        if bt_light.due_dim(time.monotonic()):
+            log(f"keyboard backlight dimmed to level {bt_light.level} "
+                f"(KB_BACKLIGHT_DIM_MINUTES)")
+            if not idle.dark:  # dark for idleness: the next key shows the new level
+                dispatcher.apply_backlight(bt_light.level)
 
 
 if __name__ == "__main__":

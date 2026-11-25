@@ -158,6 +158,14 @@ CARDS = (
     Card("input", "Smart Switch",
          "On Bluetooth, the keyboard light turns itself off to save the keyboard's battery.",
          "bluetooth-symbolic", "knob:KB_BACKLIGHT_IDLE_OFF"),
+    Card("input", "Keyboard light on Bluetooth",
+         "Detached, the light uses nearly all of the keyboard's battery, so it starts off "
+         "each time the keyboard connects. F4 turns it on.",
+         "keyboard-brightness-symbolic", "knob:KB_BACKLIGHT_BT_DARK"),
+    Card("input", "Dim the keyboard light over time",
+         "Detached, a lit keyboard light steps one level dimmer every few minutes until "
+         "it is off. F4 starts the count again.",
+         "keyboard-brightness-symbolic", "knob:KB_BACKLIGHT_DIM_MINUTES"),
     Card("input", "Restore the keyboard light",
          "The keyboard forgets its light level when it is docked, undocked or the laptop "
          "wakes up; this sets it back.",
@@ -250,6 +258,8 @@ KNOB_TEXT = {
                          "Automatic finds the bottom screen."),
     "KB_BACKLIGHT_RESTORE": ("Device", "After dock, undock and wake", ""),
     "KB_BACKLIGHT_IDLE_OFF": ("Device", "Light off after", ""),
+    "KB_BACKLIGHT_BT_DARK": ("Device", "Start with the light off", ""),
+    "KB_BACKLIGHT_DIM_MINUTES": ("Device", "One level dimmer every", ""),
     "BATTERY_LIMIT": ("Device", "On", ""),
 }
 
@@ -337,7 +347,15 @@ def knob_choices(knob, backlight_names):
 def choice_label(value, knob=None):
     if knob is not None and knob.key == "KB_BACKLIGHT_IDLE_OFF" and value.isdigit():
         return seconds_label(int(value))
+    if knob is not None and knob.key == "KB_BACKLIGHT_DIM_MINUTES" and value.isdigit():
+        return minutes_label(int(value))
     return value if value else "(automatic)"
+
+
+def minutes_label(minutes):
+    if minutes == 0:
+        return "Never"
+    return f"{minutes} minute" + ("" if minutes == 1 else "s")
 
 
 def seconds_label(seconds):

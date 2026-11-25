@@ -431,3 +431,78 @@ class KeyboardBattery(unittest.TestCase):
         self.assertFalse(charging("not charging", "kernel", False, 3, None))
         self.assertTrue(charging("charging", "report", False, 3, None))
         self.assertFalse(charging("charging", "report", False, 3, 4))
+
+
+class BluetoothLightPolicy(unittest.TestCase):
+    """2026-11-25: detached, the light cost about 29 % of the keyboard battery
+    an hour and the dark keyboard about 1 %."""
+
+    def light(self, start_dark=True, dim_after=600):
+        return watch_fn.BluetoothLight(start_dark, dim_after)
+
+    def test_starts_dark_on_bluetooth(self):
+        bt = self.light()
+        self.assertEqual(bt.connected(100.0, True, remembered=2), 0)
+        self.assertEqual(bt.level, 0)
+        self.assertFalse(bt.due_dim(10_000.0))  # nothing lit, nothing to dim
+
+    def test_docked_is_left_to_the_restore(self):
+        bt = self.light()
+        self.assertIsNone(bt.connected(100.0, False, remembered=2))
+        self.assertFalse(bt.active)
+        self.assertFalse(bt.due_dim(10_000.0))
+
+    def test_switched_off_keeps_the_remembered_level(self):
+        bt = self.light(start_dark=False)
+        self.assertIsNone(bt.connected(100.0, True, remembered=2))
+        self.assertEqual(bt.level, 2)
+        self.assertTrue(bt.due_dim(700.0))
+        self.assertEqual(bt.level, 1)
+
+    def test_f4_cycles_from_this_connections_level(self):
+        bt = self.light()
+        bt.connected(100.0, True, remembered=3)
+        self.assertEqual([bt.pressed(t) for t in (101.0, 102.0, 103.0, 104.0)], [1, 2, 3, 0])
+
+    def test_dims_one_level_every_interval_down_to_off(self):
+        bt = self.light()
+        bt.connected(100.0, True, remembered=2)
+        bt.pressed(100.0)
+        bt.pressed(100.0)  # level 2, the count starts at 100
+        self.assertFalse(bt.due_dim(699.0))
+        self.assertTrue(bt.due_dim(700.0))
+        self.assertEqual(bt.level, 1)
+        self.assertFalse(bt.due_dim(1299.0))
+        self.assertTrue(bt.due_dim(1300.0))
+        self.assertEqual(bt.level, 0)
+        self.assertFalse(bt.due_dim(100_000.0))
+
+    def test_f4_restarts_the_count(self):
+        bt = self.light()
+        bt.connected(100.0, True, remembered=0)
+        bt.pressed(100.0)
+        bt.pressed(650.0)  # level 2 at 650
+        self.assertFalse(bt.due_dim(1249.0))
+        self.assertTrue(bt.due_dim(1250.0))
+
+    def test_zero_minutes_never_dims(self):
+        bt = self.light(dim_after=0)
+        bt.connected(100.0, True, remembered=0)
+        bt.pressed(100.0)
+        self.assertFalse(bt.due_dim(1e9))
+
+    def test_settings_from_the_environment(self):
+        from unittest import mock
+        for value, expected in (("10", 600), ("0", 0), ("-1", 0), ("soon", 600)):
+            with mock.patch.dict(os.environ, {"ZENDUO_KB_BACKLIGHT_DIM_MINUTES": value}):
+                self.assertEqual(watch_fn.dim_seconds(), expected)
+        for value, expected in (("1", True), ("0", False)):
+            with mock.patch.dict(os.environ, {"ZENDUO_KB_BACKLIGHT_BT_DARK": value}):
+                self.assertEqual(watch_fn.bt_dark_enabled(), expected)
+
+    def test_f4_on_bluetooth_never_touches_the_remembered_level(self):
+        d = Recorder()
+        d.bt_light = self.light()
+        d.bt_light.connected(100.0, True, remembered=2)
+        d.dispatch(0xC7, "kbd-backlight")
+        self.assertEqual(d.spawned[-1][-2:], ["--apply", "1"])

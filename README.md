@@ -124,6 +124,8 @@ Knobs live in `~/.config/zenduo/zenduo.conf` ([annotated example](config/zenduo.
 | `BACKLIGHT_SOURCE` / `BACKLIGHT_TARGET` | `intel_backlight` / auto | Which backlight brightness is copied from and to |
 | `KB_BACKLIGHT_RESTORE` | `1` | Restore the keyboard backlight level after the keyboard re-enumerates |
 | `KB_BACKLIGHT_IDLE_OFF` | `30` | Seconds without a key press before the backlight goes dark while the keyboard is on Bluetooth (the next key brings it back); `0` = never |
+| `KB_BACKLIGHT_BT_DARK` | `1` | On Bluetooth, start every connection with the backlight off; F4 lights it. Docked, the remembered level comes back |
+| `KB_BACKLIGHT_DIM_MINUTES` | `10` | On Bluetooth, step a lit backlight one level dimmer every this many minutes, down to off; F4 restarts the count; `0` = never |
 | `DOCK_POLICY` | `1` | `0` keeps `watch-displays` running but makes it watch without acting |
 | `REMEMBER_LAYOUT` | `1` | Remember the display layout per set of connected monitors and let GNOME restore it (see below) |
 | `LOGIN_SCREEN_LAYOUT` | `1` | Give the GDM greeter the same layouts, so the password prompt is on the monitor you were using |

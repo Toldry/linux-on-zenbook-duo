@@ -271,3 +271,13 @@ class Launcher(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DimMinutesLabels(unittest.TestCase):
+    def test_dim_minutes_read_as_durations(self):
+        knob = dm.KNOB_BY_KEY["KB_BACKLIGHT_DIM_MINUTES"]
+        choices = dg.knob_choices(knob, [])
+        self.assertIn("10", choices)  # the default must be on offer
+        self.assertTrue(all(dm.validate(knob, c) == "" for c in choices))
+        self.assertEqual([dg.choice_label(c, knob) for c in ("0", "1", "10")],
+                         ["Never", "1 minute", "10 minutes"])
